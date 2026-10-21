@@ -7,7 +7,8 @@
 #include <map>
 #include <string_view>
 
-class RaveForgeProcessor : public juce::AudioProcessor
+class RaveForgeProcessor : public juce::AudioProcessor,
+                           private juce::Timer
 {
 public:
     RaveForgeProcessor();
@@ -42,6 +43,11 @@ public:
     // Shared with the editor's on-screen keyboard.
     juce::MidiKeyboardState keyboardState;
 
+    // Loads the sample chosen by the Sample parameter if it changed. Runs on
+    // a timer; public so the offline test can call it directly.
+    void syncSample();
+    int getLoadedSampleIndex() const { return loadedSample; }
+
 private:
     rf::Engine::Settings readSettings() const;
     float get (std::string_view id) const { return params.find (id)->second->load(); }
@@ -51,7 +57,10 @@ private:
     juce::StringArray paramIDs;
     std::map<std::string_view, std::atomic<float>*, std::less<>> params;
 
+    void timerCallback() override { syncSample(); }
+
     rf::KeysSynth keys;
+    int loadedSample = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RaveForgeProcessor)
 };

@@ -17,8 +17,8 @@ filter, distortion, LFO, trance gate, delay and reverb.
 | **Trance Gate** | 16 steps, 6 patterns, **Rate** (1/8, 1/16, 1/32), **Depth**, **Smooth**. |
 | **Delay** | Tempo-synced **Time**, **Feedback**, **Ping Pong**, **Tone** (darkens the repeats), **Mix**. |
 | **Reverb** | **Size**, **Damping**, **Width**, **Mix**. |
-| **Master** | **Dry/Wet**, **Output**, **Keys** (level of the built-in saw played from the keyboard). |
-| **Keyboard** | Plays a simple saw synth (also from host MIDI) into the start of the chain, so you can hear the effect without any input. |
+| **Master** | **Dry/Wet**, **Output**. |
+| **Keys** | The keyboard (and host MIDI) plays either a saw or one of the 311 built-in samples into the start of the chain. **Source** (Saw / Samples), sample browser (`<` / `>` or click the name for a menu by category), **Transpose**, **Release**, **Level**. |
 
 The LFO, gate and delay follow the host tempo and bar position while the
 transport is playing, and run free at the host tempo (or 128 BPM) when it is stopped.
@@ -28,6 +28,21 @@ Signal flow:
 ```
 input → rave stack → filter (env + LFO) → dirt → LFO volume × gate → delay → reverb → dry/wet → output
 ```
+
+## Samples
+
+`Samples/` holds one-shot synth stabs from Vengeance *Essential Club Sounds
+vol.2* (Synths, Acid, HiString), compiled into the plugin with
+`juce_add_binary_data`, so the plugin is about 44 MB and needs no extra files.
+Each sample's root note is read from its filename (`... 101 C#.wav`, with the
+German `H` for B) and mapped to the octave of middle C; use **Transpose** if a
+sample sits an octave off.
+
+These are commercial samples licensed to the repo owner for their own use.
+Keep this repository private and don't distribute builds that contain them.
+
+To add more, drop WAVs (named with a root note) into a folder under `Samples/`
+and re-run CMake.
 
 ## Building
 
@@ -77,6 +92,9 @@ Source/
     Dirt.h            waveshaper, bitcrush, downsample
     Modulation.h      envelope follower, LFO, trance gate
     Delay.h           synced stereo / ping-pong delay
+    KeysSynth.h       saw / sample voices for the keyboard
+  SampleLibrary.h     lists and decodes the built-in samples
+Samples/              the built-in WAVs
 Tests/RenderTest.cpp  offline render smoke test
 ```
 

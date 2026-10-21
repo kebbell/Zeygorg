@@ -107,6 +107,122 @@ void Section::resized()
 }
 
 //==============================================================================
+KeysPanel::KeysPanel (APVTS& s)
+    : state (s),
+      sampleParam (*s.getParameter (ParamIDs::sampleIndex)),
+      source (s, ParamIDs::keysSource, "Source"),
+      transpose (s, ParamIDs::keysTranspose, "Transpose", Palette::accent),
+      release (s, ParamIDs::keysRelease, "Release", Palette::accent),
+      level (s, ParamIDs::keysLevel, "Level", Palette::accent)
+{
+    for (auto* c : std::initializer_list<juce::Component*> { &source, &prev, &next, &nameButton, &transpose, &release, &level })
+        addAndMakeVisible (c);
+
+    for (auto* b : { &prev, &next, &nameButton })
+    {
+        b->setColour (juce::TextButton::buttonColourId, Palette::track);
+        b->setColour (juce::TextButton::textColourOffId, Palette::text);
+        b->setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    }
+
+    prev.onClick = [this] { step (-1); };
+    next.onClick = [this] { step (1); };
+    nameButton.onClick = [this] { showMenu(); };
+    refresh();
+}
+
+void KeysPanel::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    g.setColour (Palette::panel);
+    g.fillRoundedRectangle (r, 8.0f);
+    g.setColour (Palette::panelEdge);
+    g.drawRoundedRectangle (r, 8.0f, 1.0f);
+
+    g.setColour (Palette::accent2);
+    g.fillRoundedRectangle (12.0f, 11.0f, 3.0f, 14.0f, 1.5f);
+    g.setColour (Palette::text);
+    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+    g.drawText ("KEYS", 22, 8, 100, 20, juce::Justification::centredLeft);
+
+    g.setColour (Palette::dimText);
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("Sample", nameButton.getX(), nameButton.getY() - 20, nameButton.getWidth(), 16, juce::Justification::centred);
+}
+
+void KeysPanel::resized()
+{
+    auto area = getLocalBounds().reduced (8);
+    area.removeFromTop (22);
+
+    auto knobs = area.removeFromRight (3 * 84);
+    for (auto* k : { &transpose, &release, &level })
+        k->setBounds (knobs.removeFromLeft (84));
+
+    source.setBounds (area.removeFromLeft (130));
+    area.removeFromLeft (10);
+
+    auto row = area.withTrimmedTop (16).withSizeKeepingCentre (area.getWidth(), 28);
+    prev.setBounds (row.removeFromLeft (32));
+    next.setBounds (row.removeFromRight (32));
+    nameButton.setBounds (row.reduced (6, 0));
+}
+
+void KeysPanel::refresh()
+{
+    auto index = juce::roundToInt (sampleParam.convertFrom0to1 (sampleParam.getValue()));
+    auto useSample = state.getRawParameterValue (ParamIDs::keysSource)->load() > 0.5f;
+    if (index == shownIndex && useSample == shownUseSample)
+        return;
+
+    shownIndex = index;
+    shownUseSample = useSample;
+    const auto& lib = SampleLibrary::get();
+    const auto& e = lib[index];
+    nameButton.setButtonText (e.category + "  /  " + e.name + "      " + juce::String (index + 1) + " of " + juce::String (lib.size()));
+
+    for (auto* c : std::initializer_list<juce::Component*> { &prev, &next, &nameButton })
+        c->setEnabled (useSample);
+}
+
+void KeysPanel::select (int index)
+{
+    auto count = SampleLibrary::get().size();
+    index = ((index % count) + count) % count;
+    sampleParam.beginChangeGesture();
+    sampleParam.setValueNotifyingHost (sampleParam.convertTo0to1 ((float) index));
+    sampleParam.endChangeGesture();
+    refresh();
+}
+
+void KeysPanel::step (int delta)
+{
+    select (shownIndex + delta);
+}
+
+void KeysPanel::showMenu()
+{
+    const auto& lib = SampleLibrary::get();
+    juce::PopupMenu menu;
+
+    for (auto& category : lib.categories())
+    {
+        juce::PopupMenu sub;
+        for (int i = 0; i < lib.size(); ++i)
+            if (lib[i].category == category)
+                sub.addItem (i + 1, lib[i].name, true, i == shownIndex);
+        menu.addSubMenu (category, sub, true, nullptr, lib[shownIndex].category == category);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&nameButton),
+                        [safe = juce::Component::SafePointer<KeysPanel> (this)] (int result)
+                        {
+                            if (safe != nullptr && result > 0)
+                                safe->select (result - 1);
+                        });
+}
+
+//==============================================================================
 void GateDisplay::setState (int patternIndex, int step, bool on)
 {
     if (patternIndex != pattern || step != current || on != enabled)
@@ -154,7 +270,8 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
       gate ("Trance Gate", Palette::accent2, 5, 2),
       delay ("Delay", Palette::accent2, 3, 2),
       reverb ("Reverb", Palette::accent2, 2, 2),
-      master ("Master", Palette::accent2, 2, 2),
+      master ("Master", Palette::accent2, 1, 2),
+      keysPanel (p.apvts),
       keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     using namespace ParamIDs;
@@ -213,7 +330,6 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
 
     master.add<Knob> (s, ParamIDs::mix, "Dry/Wet", Palette::accent);
     master.add<Knob> (s, output, "Output", Palette::accent);
-    master.add<Knob> (s, keysLevel, "Keys", Palette::accent);
 
     for (auto* c : { &rave, &filter, &dirt, &lfo, &gate, &delay, &reverb, &master })
         addAndMakeVisible (c);
@@ -231,8 +347,9 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
     keyboard.setScrollButtonsVisible (false);
     keyboard.setWantsKeyboardFocus (false);
     addAndMakeVisible (keyboard);
+    addAndMakeVisible (keysPanel);
 
-    setSize (1120, 700);
+    setSize (1120, 830);
     timerCallback();
     startTimerHz (30);
 }
@@ -266,6 +383,8 @@ void RaveForgeEditor::resized()
     keyboard.setBounds (area.removeFromBottom (88));
     keyboard.setKeyWidth ((float) keyboard.getWidth() / 43.0f);
     area.removeFromBottom (10);
+    keysPanel.setBounds (area.removeFromBottom (136));
+    area.removeFromBottom (10);
 
     auto layoutRow = [] (juce::Rectangle<int> row, std::initializer_list<ui::Section*> sections)
     {
@@ -291,6 +410,8 @@ void RaveForgeEditor::resized()
 
 void RaveForgeEditor::timerCallback()
 {
+    keysPanel.refresh();
+
     auto& s = raveProcessor.apvts;
     auto synced = s.getRawParameterValue (ParamIDs::lfoSync)->load() > 0.5f;
     lfoRateKnob->setEnabled (! synced);

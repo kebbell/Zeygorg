@@ -13,6 +13,20 @@ RaveForgeProcessor::RaveForgeProcessor()
 
     for (auto& id : paramIDs)
         params[std::string_view (id.toRawUTF8())] = apvts.getRawParameterValue (id);
+
+    syncSample();
+    startTimerHz (20);
+}
+
+void RaveForgeProcessor::syncSample()
+{
+    auto index = getChoice (ParamIDs::sampleIndex);
+    if (index != loadedSample)
+    {
+        keys.setSample (SampleLibrary::get().load (index));
+        loadedSample = index;
+    }
+    keys.collectGarbage();
 }
 
 bool RaveForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -108,7 +122,12 @@ void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     // Merge on-screen key presses into the host MIDI, then play the keys synth into the input.
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
-    keys.renderAdding (buffer, midi, get (ParamIDs::keysLevel));
+    rf::KeysSynth::Settings keySettings;
+    keySettings.useSample = getChoice (ParamIDs::keysSource) == 1;
+    keySettings.transpose = getChoice (ParamIDs::keysTranspose);
+    keySettings.releaseMs = get (ParamIDs::keysRelease);
+    keySettings.level = get (ParamIDs::keysLevel);
+    keys.renderAdding (buffer, midi, keySettings);
 
     engine.process (buffer, readSettings(), transport);
 }

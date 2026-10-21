@@ -111,7 +111,7 @@ int main (int argc, char** argv)
 
     auto report = [&] (const juce::String& name, Result r)
     {
-        std::printf ("%-12s %s  peak %.3f\n", name.toRawUTF8(), r.ok ? "ok  " : "FAIL", r.peak);
+        std::printf ("%-14s %s  peak %.3f\n", name.toRawUTF8(), r.ok ? "ok  " : "FAIL", r.peak);
         if (! r.ok)
             ++failures;
     };
@@ -139,7 +139,24 @@ int main (int argc, char** argv)
     report ("showcase", render (proc, input, out));
     writeWav (outDir.getChildFile ("showcase.wav"), out);
 
-    // Keys only: silent input, a chord held on the on-screen keyboard state.
+    // Every built-in sample must decode and have a sensible root note.
+    {
+        const auto& lib = SampleLibrary::get();
+        int bad = 0;
+        for (int i = 0; i < lib.size(); ++i)
+        {
+            auto sample = lib.load (i);
+            if (sample == nullptr || sample->audio.getNumSamples() < 100 || lib[i].rootNote < 60 || lib[i].rootNote > 71)
+            {
+                std::printf ("  bad sample %d: %s %s\n", i, lib[i].category.toRawUTF8(), lib[i].name.toRawUTF8());
+                ++bad;
+            }
+        }
+        report ("samples x" + juce::String (lib.size()), { bad == 0 && lib.size() == 311, (float) bad });
+    }
+
+    // Keys only (saw): silent input, a chord held on the on-screen keyboard state.
+    setParam (proc, ParamIDs::keysSource, 0.0f);
     {
         juce::AudioBuffer<float> silence (2, input.getNumSamples());
         silence.clear();
@@ -148,8 +165,26 @@ int main (int argc, char** argv)
         auto r = render (proc, silence, out);
         proc.keyboardState.allNotesOff (1);
         r.ok = r.ok && r.peak > 0.05f; // the synth must actually sound
-        report ("keys", r);
+        report ("keys saw", r);
         writeWav (outDir.getChildFile ("keys.wav"), out);
+    }
+
+    // Keys from a few samples across the categories.
+    setParam (proc, ParamIDs::keysSource, 1.0f);
+    for (auto index : { 0, 100, 250, 305 })
+    {
+        setParam (proc, ParamIDs::sampleIndex, (float) index);
+        proc.syncSample();
+        juce::AudioBuffer<float> silence (2, input.getNumSamples());
+        silence.clear();
+        for (auto note : { 48, 55, 60 })
+            proc.keyboardState.noteOn (1, note, 0.9f);
+        auto r = render (proc, silence, out);
+        proc.keyboardState.allNotesOff (1);
+        r.ok = r.ok && r.peak > 0.05f && proc.getLoadedSampleIndex() == index;
+        report ("sample " + juce::String (index), r);
+        if (index == 0)
+            writeWav (outDir.getChildFile ("sample.wav"), out);
     }
 
     juce::Random rng (1234);

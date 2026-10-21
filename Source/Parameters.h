@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "SampleLibrary.h"
 
 // Parameter IDs, choice lists and the APVTS layout. Everything the engine and
 // the editor need to agree on lives here.
@@ -61,13 +62,20 @@ namespace ParamIDs
     // Master
     inline constexpr auto mix        = "mix";
     inline constexpr auto output     = "output";
+
+    // Keys (on-screen keyboard / MIDI)
     inline constexpr auto keysLevel  = "keysLevel";
+    inline constexpr auto keysSource = "keysSource";
+    inline constexpr auto sampleIndex= "sampleIndex";
+    inline constexpr auto keysTranspose = "keysTranspose";
+    inline constexpr auto keysRelease= "keysRelease";
 }
 
 namespace Choices
 {
     inline const juce::StringArray filterTypes { "Low Pass", "Band Pass", "High Pass" };
     inline const juce::StringArray dirtShapes  { "Soft", "Hard", "Fold", "Tube" };
+    inline const juce::StringArray keysSources { "Saw", "Samples" };
     inline const juce::StringArray lfoShapes   { "Sine", "Triangle", "Saw", "Square", "S&H" };
 
     inline const juce::StringArray lfoDivs     { "4 Bars", "2 Bars", "1/1", "1/2", "1/4", "1/8", "1/16", "1/4T", "1/8T", "1/8D" };
@@ -162,6 +170,19 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     add (new P ({ ParamIDs::mix, 1 }, "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent));
     add (new P ({ ParamIDs::output, 1 }, "Output", NormalisableRange<float> (-24.0f, 12.0f), 0.0f, db));
     add (new P ({ ParamIDs::keysLevel, 1 }, "Keys Level", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
+    add (new C ({ ParamIDs::keysSource, 1 }, "Keys Source", Choices::keysSources, 1));
+    add (new AudioParameterInt ({ ParamIDs::sampleIndex, 1 }, "Sample", 0, juce::jmax (0, SampleLibrary::get().size() - 1), 0,
+                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+                                {
+                                    const auto& e = SampleLibrary::get()[v];
+                                    return e.category + " " + e.name;
+                                })));
+    add (new AudioParameterInt ({ ParamIDs::keysTranspose, 1 }, "Keys Transpose", -24, 24, 0,
+                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+                                {
+                                    return (v > 0 ? "+" : "") + String (v) + " st";
+                                })));
+    add (new P ({ ParamIDs::keysRelease, 1 }, "Keys Release", freqRange (5.0f, 2000.0f, 200.0f), 250.0f, ms));
 
     return { p.begin(), p.end() };
 }

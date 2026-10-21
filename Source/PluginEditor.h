@@ -78,6 +78,30 @@ private:
     juce::Component* footer = nullptr;
 };
 
+// Browser for the built-in samples: source switch, prev/next, a name button
+// that opens a menu of every sample, and transpose/release/level knobs.
+class KeysPanel : public juce::Component
+{
+public:
+    explicit KeysPanel (APVTS& state);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void refresh();
+
+private:
+    void step (int delta);
+    void select (int index);
+    void showMenu();
+
+    APVTS& state;
+    juce::RangedAudioParameter& sampleParam;
+    Choice source;
+    juce::TextButton prev { "<" }, next { ">" }, nameButton;
+    Knob transpose, release, level;
+    int shownIndex = -1;
+    bool shownUseSample = true;
+};
+
 // Shows the selected 16-step gate pattern with the playing step lit.
 class GateDisplay : public juce::Component
 {
@@ -108,6 +132,7 @@ private:
 
     ui::Section rave, filter, dirt, lfo, gate, delay, reverb, master;
     ui::GateDisplay gateDisplay;
+    ui::KeysPanel keysPanel;
     juce::MidiKeyboardComponent keyboard;
 
     ui::Knob* lfoRateKnob = nullptr;

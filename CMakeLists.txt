@@ -23,6 +23,12 @@ endif ()
 
 option(RAVEFORGE_BUILD_TESTS "Build the offline render test" ON)
 
+# The sample library is compiled into the binary (see Samples/).
+file(GLOB SampleFiles CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Samples/*/*.wav)
+list(SORT SampleFiles)
+juce_add_binary_data(RaveForgeSamples SOURCES ${SampleFiles})
+set_target_properties(RaveForgeSamples PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
 set(PluginSources
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
@@ -35,7 +41,8 @@ set(PluginSources
     Source/DSP/Dirt.h
     Source/DSP/Modulation.h
     Source/DSP/Delay.h
-    Source/DSP/KeysSynth.h)
+    Source/DSP/KeysSynth.h
+    Source/SampleLibrary.h)
 
 juce_add_plugin(RaveForge
     COMPANY_NAME "Kebbell"
@@ -63,6 +70,7 @@ target_compile_definitions(RaveForge
 
 target_link_libraries(RaveForge
     PRIVATE
+        RaveForgeSamples
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -82,6 +90,7 @@ if (RAVEFORGE_BUILD_TESTS)
         JUCE_USE_CURL=0
         RAVEFORGE_TEST_BUILD=1)
     target_link_libraries(RaveForgeTest PRIVATE
+        RaveForgeSamples
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags
