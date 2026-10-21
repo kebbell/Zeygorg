@@ -7,11 +7,11 @@
 #include <map>
 #include <string_view>
 
-class RaveForgeProcessor : public juce::AudioProcessor,
+class ZeygorgProcessor : public juce::AudioProcessor,
                            private juce::Timer
 {
 public:
-    RaveForgeProcessor();
+    ZeygorgProcessor();
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -22,7 +22,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    const juce::String getName() const override { return "RaveForge"; }
+    const juce::String getName() const override { return "Zeygorg"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -60,7 +60,10 @@ private:
     void timerCallback() override { syncSample(); }
 
     rf::KeysSynth keys;
+    rf::Randomiser randomiser;
+    juce::MidiBuffer snappedMidi;
+    double freeBeat = 0.0;
     int loadedSample = -1;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RaveForgeProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZeygorgProcessor)
 };

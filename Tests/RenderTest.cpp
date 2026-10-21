@@ -1,8 +1,8 @@
-// Offline smoke test: renders a saw riff through RaveForge with the defaults,
+// Offline smoke test: renders a saw riff through Zeygorg with the defaults,
 // everything maxed, a "showcase" setting and 20 random settings, and fails if
 // any output is NaN/inf or runs away. Also writes WAVs and a UI snapshot.
 //
-// Usage: RaveForgeTest [output-dir]
+// Usage: ZeygorgTest [output-dir]
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
@@ -42,7 +42,7 @@ juce::AudioBuffer<float> makeRiff()
 
 struct Result { bool ok; float peak; };
 
-Result render (RaveForgeProcessor& proc, const juce::AudioBuffer<float>& input, juce::AudioBuffer<float>& out)
+Result render (ZeygorgProcessor& proc, const juce::AudioBuffer<float>& input, juce::AudioBuffer<float>& out)
 {
     proc.reset();
     out.makeCopyOf (input);
@@ -53,6 +53,7 @@ Result render (RaveForgeProcessor& proc, const juce::AudioBuffer<float>& input, 
     {
         auto n = juce::jmin (blockSize, out.getNumSamples() - start);
         juce::AudioBuffer<float> block (out.getArrayOfWritePointers(), 2, start, n);
+        midi.clear(); // hosts hand over a fresh buffer every block
         proc.processBlock (block, midi);
 
         for (int ch = 0; ch < 2; ++ch)
@@ -67,14 +68,14 @@ Result render (RaveForgeProcessor& proc, const juce::AudioBuffer<float>& input, 
     return { peak < 8.0f, peak };
 }
 
-void setAll (RaveForgeProcessor& proc, std::function<float (juce::RangedAudioParameter&)> value)
+void setAll (ZeygorgProcessor& proc, std::function<float (juce::RangedAudioParameter&)> value)
 {
     for (auto* p : proc.getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
             r->setValueNotifyingHost (value (*r));
 }
 
-void setParam (RaveForgeProcessor& proc, const juce::String& id, float plainValue)
+void setParam (ZeygorgProcessor& proc, const juce::String& id, float plainValue)
 {
     auto* p = proc.apvts.getParameter (id);
     p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
@@ -101,7 +102,7 @@ int main (int argc, char** argv)
     auto outDir = argc > 1 ? juce::File (juce::String (argv[1])) : juce::File::getCurrentWorkingDirectory();
     outDir.createDirectory();
 
-    RaveForgeProcessor proc;
+    ZeygorgProcessor proc;
     proc.setPlayConfigDetails (2, 2, sampleRate, blockSize);
     proc.prepareToPlay (sampleRate, blockSize);
 
@@ -187,6 +188,78 @@ int main (int argc, char** argv)
             writeWav (outDir.getChildFile ("sample.wav"), out);
     }
 
+    // Randomiser on its own: notes must stay in key, repeat every loop, and
+    // pair every note-on with a note-off.
+    {
+        rf::Randomiser rnd;
+        rf::Randomiser::Settings rs;
+        rs.on = true;
+        rs.root = 9;      // A
+        rs.scale = 1;     // minor
+        rs.octaves = 2;
+        rs.seed = 42;
+        const auto& minor = rf::Scales::all()[1];
+
+        auto beatsPerSample = 128.0 / 60.0 / sampleRate;
+        juce::Array<int> notes;
+        int ons = 0, offs = 0, outOfKey = 0;
+        double beat = 0.0;
+        for (int b = 0; b < 2000; ++b)
+        {
+            juce::MidiBuffer midi;
+            rnd.process (midi, blockSize, beat, beatsPerSample, rs);
+            beat += beatsPerSample * blockSize;
+            for (const auto m : midi)
+            {
+                auto msg = m.getMessage();
+                if (msg.isNoteOn())
+                {
+                    ++ons;
+                    notes.add (msg.getNoteNumber());
+                    auto rel = ((msg.getNoteNumber() - rs.root) % 12 + 12) % 12;
+                    if (std::find (minor.steps.begin(), minor.steps.begin() + minor.size, rel) == minor.steps.begin() + minor.size)
+                        ++outOfKey;
+                }
+                else if (msg.isNoteOff())
+                    ++offs;
+            }
+        }
+
+        // Steps are 1/16ths, so the first 16 notes of loop 1 and loop 2 must match.
+        auto perLoop = 0;
+        { juce::MidiBuffer m; rf::Randomiser r2; r2.process (m, (int) (4.0 / beatsPerSample), 0.0, beatsPerSample, rs);
+          for (const auto e : m) perLoop += e.getMessage().isNoteOn() ? 1 : 0; }
+        auto repeats = perLoop > 0 && notes.size() > 2 * perLoop;
+        for (int i = 0; repeats && i < perLoop; ++i)
+            repeats = notes[i] == notes[i + perLoop];
+
+        auto ok = ons > 100 && outOfKey == 0 && std::abs (ons - offs) <= 1 && repeats;
+        std::printf ("randomiser     %s  %d notes, %d out of key, %d per bar, repeats %s\n",
+                     ok ? "ok  " : "FAIL", ons, outOfKey, perLoop, repeats ? "yes" : "no");
+        if (! ok)
+            ++failures;
+
+        auto snapOk = rf::Scales::snap (61, 0, 0) == 60 && rf::Scales::snap (66, 0, 0) == 65 && rf::Scales::snap (64, 9, 1) == 64
+                   && rf::Scales::snap (63, 9, 1) == 62;
+        std::printf ("snap           %s\n", snapOk ? "ok" : "FAIL");
+        if (! snapOk)
+            ++failures;
+    }
+
+    // Randomiser through the whole plugin (transport stopped, so it free-runs).
+    {
+        setAll (proc, [] (auto& p) { return p.getDefaultValue(); });
+        setParam (proc, ParamIDs::randOn, 1.0f);
+        setParam (proc, ParamIDs::sampleIndex, 210.0f);
+        proc.syncSample();
+        juce::AudioBuffer<float> silence (2, input.getNumSamples());
+        silence.clear();
+        auto r = render (proc, silence, out);
+        r.ok = r.ok && r.peak > 0.05f;
+        report ("random keys", r);
+        writeWav (outDir.getChildFile ("randomiser.wav"), out);
+    }
+
     juce::Random rng (1234);
     for (int i = 0; i < 20; ++i)
     {
@@ -199,6 +272,13 @@ int main (int argc, char** argv)
     setParam (proc, ParamIDs::gateOn, 1.0f);
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
+        for (int ch = 1; ch <= 16; ++ch)
+            for (int n = 0; n < 128; ++n)
+                if (proc.keyboardState.isNoteOn (ch, n))
+                {
+                    std::printf ("  stuck key ch %d note %d\n", ch, n);
+                    ++failures;
+                }
         auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f);
         auto file = outDir.getChildFile ("ui.png");
         file.deleteFile();

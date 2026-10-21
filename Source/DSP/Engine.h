@@ -10,7 +10,7 @@ namespace rf
 {
 
 // The whole effect chain:
-//   input -> rave stack -> filter (env + LFO) -> dirt -> LFO volume x gate
+//   input -> boost stack -> filter (env + LFO) -> dirt -> LFO volume x gate
 //         -> delay -> reverb -> dry/wet -> output
 class Engine
 {

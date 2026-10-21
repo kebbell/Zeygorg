@@ -1,11 +1,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-RaveForgeProcessor::RaveForgeProcessor()
+ZeygorgProcessor::ZeygorgProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "RaveForge", createParameterLayout())
+      apvts (*this, nullptr, "Zeygorg", createParameterLayout())
 {
     for (auto* p : getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
@@ -18,7 +18,7 @@ RaveForgeProcessor::RaveForgeProcessor()
     startTimerHz (20);
 }
 
-void RaveForgeProcessor::syncSample()
+void ZeygorgProcessor::syncSample()
 {
     auto index = getChoice (ParamIDs::sampleIndex);
     if (index != loadedSample)
@@ -29,7 +29,7 @@ void RaveForgeProcessor::syncSample()
     keys.collectGarbage();
 }
 
-bool RaveForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool ZeygorgProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     auto out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
@@ -37,13 +37,15 @@ bool RaveForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
     return layouts.getMainInputChannelSet() == out;
 }
 
-void RaveForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void ZeygorgProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare (sampleRate, samplesPerBlock);
     keys.prepare (sampleRate, samplesPerBlock);
+    randomiser.reset();
+    snappedMidi.ensureSize (4096);
 }
 
-rf::Engine::Settings RaveForgeProcessor::readSettings() const
+rf::Engine::Settings ZeygorgProcessor::readSettings() const
 {
     using namespace ParamIDs;
     rf::Engine::Settings s;
@@ -98,7 +100,7 @@ rf::Engine::Settings RaveForgeProcessor::readSettings() const
     return s;
 }
 
-void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+void ZeygorgProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -120,8 +122,48 @@ void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
-    // Merge on-screen key presses into the host MIDI, then play the keys synth into the input.
-    keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
+    auto numSamples = buffer.getNumSamples();
+    auto root = getChoice (ParamIDs::randRoot);
+    auto scale = getChoice (ParamIDs::randScale);
+
+    // Merge on-screen key presses into the host MIDI.
+    keyboardState.processNextMidiBuffer (midi, 0, numSamples, true);
+
+    // Snap played notes into the randomiser's key and scale. It's a fixed
+    // mapping, so note-offs land on the same notes as their note-ons.
+    if (get (ParamIDs::snapKeys) > 0.5f)
+    {
+        snappedMidi.clear();
+        for (const auto m : midi)
+        {
+            auto msg = m.getMessage();
+            if (msg.isNoteOnOrOff())
+                msg.setNoteNumber (rf::Scales::snap (msg.getNoteNumber(), root, scale));
+            snappedMidi.addEvent (msg, m.samplePosition);
+        }
+        midi.swapWith (snappedMidi);
+    }
+
+    // Random notes on the DAW's grid (or free-running at its tempo when stopped).
+    {
+        auto bpm = transport.bpm > 0.0 ? transport.bpm : 128.0;
+        auto beatsPerSample = bpm / 60.0 / getSampleRate();
+        auto beat0 = transport.playing ? transport.ppq : freeBeat;
+        freeBeat = beat0 + beatsPerSample * numSamples;
+
+        rf::Randomiser::Settings rs;
+        rs.on = get (ParamIDs::randOn) > 0.5f;
+        rs.root = root;
+        rs.scale = scale;
+        rs.stepBeats = Choices::randRateBeats[juce::jlimit (0, Choices::randRates.size() - 1, getChoice (ParamIDs::randRate))];
+        rs.octaves = getChoice (ParamIDs::randOctaves);
+        rs.chance = get (ParamIDs::randChance);
+        rs.length = get (ParamIDs::randLength);
+        rs.seed = getChoice (ParamIDs::randSeed);
+        randomiser.process (midi, numSamples, beat0, beatsPerSample, rs);
+    }
+
+    // Play the keys synth into the input.
     rf::KeysSynth::Settings keySettings;
     keySettings.useSample = getChoice (ParamIDs::keysSource) == 1;
     keySettings.transpose = getChoice (ParamIDs::keysTranspose);
@@ -132,27 +174,27 @@ void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     engine.process (buffer, readSettings(), transport);
 }
 
-juce::AudioProcessorEditor* RaveForgeProcessor::createEditor()
+juce::AudioProcessorEditor* ZeygorgProcessor::createEditor()
 {
-    return new RaveForgeEditor (*this);
+    return new ZeygorgEditor (*this);
 }
 
-void RaveForgeProcessor::getStateInformation (juce::MemoryBlock& destData)
+void ZeygorgProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     if (auto xml = apvts.copyState().createXml())
         copyXmlToBinary (*xml, destData);
 }
 
-void RaveForgeProcessor::setStateInformation (const void* data, int sizeInBytes)
+void ZeygorgProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
-#if ! RAVEFORGE_TEST_BUILD
+#if ! ZEYGORG_TEST_BUILD
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new RaveForgeProcessor();
+    return new ZeygorgProcessor();
 }
 #endif

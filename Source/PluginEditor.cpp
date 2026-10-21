@@ -70,9 +70,9 @@ void Toggle::resized()
 Section::Section (const juce::String& t, juce::Colour a, int c, int r)
     : cols (c), rows (r), title (t), accent (a) {}
 
-void Section::paint (juce::Graphics& g)
+void paintPanel (juce::Graphics& g, juce::Component& c, const juce::String& title, juce::Colour accent)
 {
-    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    auto r = c.getLocalBounds().toFloat().reduced (0.5f);
     g.setColour (Palette::panel);
     g.fillRoundedRectangle (r, 8.0f);
     g.setColour (Palette::panelEdge);
@@ -82,7 +82,12 @@ void Section::paint (juce::Graphics& g)
     g.fillRoundedRectangle (12.0f, 11.0f, 3.0f, 14.0f, 1.5f);
     g.setColour (Palette::text);
     g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    g.drawText (title.toUpperCase(), 22, 8, getWidth() - 30, 20, juce::Justification::centredLeft);
+    g.drawText (title.toUpperCase(), 22, 8, c.getWidth() - 30, 20, juce::Justification::centredLeft);
+}
+
+void Section::paint (juce::Graphics& g)
+{
+    paintPanel (g, *this, title, accent);
 }
 
 void Section::resized()
@@ -133,21 +138,12 @@ KeysPanel::KeysPanel (APVTS& s)
 
 void KeysPanel::paint (juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat().reduced (0.5f);
-    g.setColour (Palette::panel);
-    g.fillRoundedRectangle (r, 8.0f);
-    g.setColour (Palette::panelEdge);
-    g.drawRoundedRectangle (r, 8.0f, 1.0f);
-
-    g.setColour (Palette::accent2);
-    g.fillRoundedRectangle (12.0f, 11.0f, 3.0f, 14.0f, 1.5f);
-    g.setColour (Palette::text);
-    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    g.drawText ("KEYS", 22, 8, 100, 20, juce::Justification::centredLeft);
+    paintPanel (g, *this, "Keys", Palette::accent2);
 
     g.setColour (Palette::dimText);
     g.setFont (juce::FontOptions (12.0f));
-    g.drawText ("Sample", nameButton.getX(), nameButton.getY() - 20, nameButton.getWidth(), 16, juce::Justification::centred);
+    auto label = "Sample   " + juce::String (shownIndex + 1) + " / " + juce::String (SampleLibrary::get().size());
+    g.drawText (label, nameButton.getX(), nameButton.getY() - 20, nameButton.getWidth(), 16, juce::Justification::centred);
 }
 
 void KeysPanel::resized()
@@ -155,12 +151,12 @@ void KeysPanel::resized()
     auto area = getLocalBounds().reduced (8);
     area.removeFromTop (22);
 
-    auto knobs = area.removeFromRight (3 * 84);
+    auto knobs = area.removeFromRight (3 * 74);
     for (auto* k : { &transpose, &release, &level })
-        k->setBounds (knobs.removeFromLeft (84));
+        k->setBounds (knobs.removeFromLeft (74));
 
-    source.setBounds (area.removeFromLeft (130));
-    area.removeFromLeft (10);
+    source.setBounds (area.removeFromLeft (110));
+    area.removeFromLeft (4);
 
     auto row = area.withTrimmedTop (16).withSizeKeepingCentre (area.getWidth(), 28);
     prev.setBounds (row.removeFromLeft (32));
@@ -179,7 +175,8 @@ void KeysPanel::refresh()
     shownUseSample = useSample;
     const auto& lib = SampleLibrary::get();
     const auto& e = lib[index];
-    nameButton.setButtonText (e.category + "  /  " + e.name + "      " + juce::String (index + 1) + " of " + juce::String (lib.size()));
+    nameButton.setButtonText (e.category + "  /  " + e.name);
+    repaint();
 
     for (auto* c : std::initializer_list<juce::Component*> { &prev, &next, &nameButton })
         c->setEnabled (useSample);
@@ -223,6 +220,67 @@ void KeysPanel::showMenu()
 }
 
 //==============================================================================
+RandomiserPanel::RandomiserPanel (APVTS& s)
+    : seedParam (*s.getParameter (ParamIDs::randSeed)),
+      on (s, ParamIDs::randOn, "On"),
+      key (s, ParamIDs::randRoot, "Key"),
+      scale (s, ParamIDs::randScale, "Scale"),
+      rate (s, ParamIDs::randRate, "Rate"),
+      octaves (s, ParamIDs::randOctaves, "Octaves", Palette::accent),
+      chance (s, ParamIDs::randChance, "Chance", Palette::accent),
+      length (s, ParamIDs::randLength, "Length", Palette::accent),
+      snap (s, ParamIDs::snapKeys, "Snap Keys")
+{
+    for (auto* c : std::initializer_list<juce::Component*> { &on, &key, &scale, &rate, &octaves, &chance, &length, &newPattern, &snap })
+        addAndMakeVisible (c);
+
+    newPattern.setColour (juce::TextButton::buttonColourId, Palette::track);
+    newPattern.setColour (juce::TextButton::textColourOffId, Palette::text);
+    newPattern.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    newPattern.onClick = [this]
+    {
+        auto seed = juce::Random::getSystemRandom().nextInt ({ 1, 10000 });
+        seedParam.beginChangeGesture();
+        seedParam.setValueNotifyingHost (seedParam.convertTo0to1 ((float) seed));
+        seedParam.endChangeGesture();
+    };
+}
+
+void RandomiserPanel::paint (juce::Graphics& g)
+{
+    paintPanel (g, *this, "Randomiser", Palette::accent2);
+
+    g.setColour (Palette::dimText);
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("Pattern", newPattern.getX() - 10, newPattern.getY() - 20, newPattern.getWidth() + 20, 16, juce::Justification::centred);
+}
+
+void RandomiserPanel::resized()
+{
+    auto area = getLocalBounds().reduced (8);
+    area.removeFromTop (22);
+
+    // Fixed widths for the controls, then share out whatever is left.
+    std::pair<juce::Component*, int> cols[] {
+        { &on, 58 }, { &key, 64 }, { &scale, 128 }, { &rate, 70 },
+        { &octaves, 66 }, { &chance, 66 }, { &length, 66 }, { &newPattern, 64 }, { &snap, 86 } };
+
+    auto total = 0;
+    for (auto& c : cols)
+        total += c.second;
+    auto extra = juce::jmax (0, area.getWidth() - total) / (int) std::size (cols);
+
+    for (auto& [comp, width] : cols)
+    {
+        auto cell = area.removeFromLeft (width + extra);
+        if (comp == &newPattern)
+            comp->setBounds (cell.withTrimmedTop (16).withSizeKeepingCentre (juce::jmin (cell.getWidth() - 8, 64), 24));
+        else
+            comp->setBounds (cell);
+    }
+}
+
+//==============================================================================
 void GateDisplay::setState (int patternIndex, int step, bool on)
 {
     if (patternIndex != pattern || step != current || on != enabled)
@@ -261,9 +319,9 @@ void GateDisplay::paint (juce::Graphics& g)
 } // namespace ui
 
 //==============================================================================
-RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
+ZeygorgEditor::ZeygorgEditor (ZeygorgProcessor& p)
     : AudioProcessorEditor (&p), raveProcessor (p),
-      rave ("Rave", Palette::accent2, 3, 2),
+      rave ("Boost", Palette::accent2, 3, 2),
       filter ("Filter", Palette::accent2, 3, 2),
       dirt ("Dirt", Palette::accent2, 3, 2),
       lfo ("LFO", Palette::accent2, 4, 2),
@@ -272,6 +330,7 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
       reverb ("Reverb", Palette::accent2, 2, 2),
       master ("Master", Palette::accent2, 1, 2),
       keysPanel (p.apvts),
+      randomiserPanel (p.apvts),
       keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     using namespace ParamIDs;
@@ -348,33 +407,34 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
     keyboard.setWantsKeyboardFocus (false);
     addAndMakeVisible (keyboard);
     addAndMakeVisible (keysPanel);
+    addAndMakeVisible (randomiserPanel);
 
-    setSize (1120, 830);
+    setSize (1280, 830);
     timerCallback();
     startTimerHz (30);
 }
 
-RaveForgeEditor::~RaveForgeEditor()
+ZeygorgEditor::~ZeygorgEditor()
 {
     setLookAndFeel (nullptr);
 }
 
-void RaveForgeEditor::paint (juce::Graphics& g)
+void ZeygorgEditor::paint (juce::Graphics& g)
 {
     g.fillAll (Palette::background);
 
     auto header = getLocalBounds().removeFromTop (48).reduced (18, 0);
     g.setColour (Palette::text);
     g.setFont (juce::FontOptions (26.0f, juce::Font::bold));
-    g.drawText ("RAVEFORGE", header, juce::Justification::centredLeft);
+    g.drawText ("ZEYGORG", header, juce::Justification::centredLeft);
 
     g.setColour (Palette::dimText);
     g.setFont (juce::FontOptions (12.0f));
-    g.drawText ("detuned stack  /  filter  /  dirt  /  lfo  /  gate  /  delay  /  reverb",
+    g.drawText ("boost  /  keys  /  randomiser  /  filter  /  dirt  /  lfo  /  gate  /  delay  /  reverb",
                 header, juce::Justification::centredRight);
 }
 
-void RaveForgeEditor::resized()
+void ZeygorgEditor::resized()
 {
     auto area = getLocalBounds().reduced (12);
     area.removeFromTop (40);
@@ -383,8 +443,13 @@ void RaveForgeEditor::resized()
     keyboard.setBounds (area.removeFromBottom (88));
     keyboard.setKeyWidth ((float) keyboard.getWidth() / 43.0f);
     area.removeFromBottom (10);
-    keysPanel.setBounds (area.removeFromBottom (136));
-    area.removeFromBottom (10);
+
+    // Keys and the randomiser sit on top, where the sample is picked.
+    auto keysRow = area.removeFromTop (136);
+    keysPanel.setBounds (keysRow.removeFromLeft ((keysRow.getWidth() - 10) * 46 / 100));
+    keysRow.removeFromLeft (10);
+    randomiserPanel.setBounds (keysRow);
+    area.removeFromTop (10);
 
     auto layoutRow = [] (juce::Rectangle<int> row, std::initializer_list<ui::Section*> sections)
     {
@@ -408,7 +473,7 @@ void RaveForgeEditor::resized()
     layoutRow (area, { &gate, &delay, &reverb, &master });
 }
 
-void RaveForgeEditor::timerCallback()
+void ZeygorgEditor::timerCallback()
 {
     keysPanel.refresh();
 

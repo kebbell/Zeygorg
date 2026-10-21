@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SampleLibrary.h"
+#include "DSP/Randomiser.h"
 
 // Parameter IDs, choice lists and the APVTS layout. Everything the engine and
 // the editor need to agree on lives here.
@@ -69,6 +70,17 @@ namespace ParamIDs
     inline constexpr auto sampleIndex= "sampleIndex";
     inline constexpr auto keysTranspose = "keysTranspose";
     inline constexpr auto keysRelease= "keysRelease";
+
+    // MIDI randomiser
+    inline constexpr auto randOn     = "randOn";
+    inline constexpr auto randRoot   = "randRoot";
+    inline constexpr auto randScale  = "randScale";
+    inline constexpr auto randRate   = "randRate";
+    inline constexpr auto randOctaves= "randOctaves";
+    inline constexpr auto randChance = "randChance";
+    inline constexpr auto randLength = "randLength";
+    inline constexpr auto randSeed   = "randSeed";
+    inline constexpr auto snapKeys   = "snapKeys";
 }
 
 namespace Choices
@@ -76,6 +88,9 @@ namespace Choices
     inline const juce::StringArray filterTypes { "Low Pass", "Band Pass", "High Pass" };
     inline const juce::StringArray dirtShapes  { "Soft", "Hard", "Fold", "Tube" };
     inline const juce::StringArray keysSources { "Saw", "Samples" };
+    inline const juce::StringArray roots       { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    inline const juce::StringArray randRates   { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+    inline constexpr double randRateBeats[]    { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 };
     inline const juce::StringArray lfoShapes   { "Sine", "Triangle", "Saw", "Square", "S&H" };
 
     inline const juce::StringArray lfoDivs     { "4 Bars", "2 Bars", "1/1", "1/2", "1/4", "1/8", "1/16", "1/4T", "1/8T", "1/8D" };
@@ -183,6 +198,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
                                     return (v > 0 ? "+" : "") + String (v) + " st";
                                 })));
     add (new P ({ ParamIDs::keysRelease, 1 }, "Keys Release", freqRange (5.0f, 2000.0f, 200.0f), 250.0f, ms));
+
+    add (new B ({ ParamIDs::randOn, 1 }, "Randomiser On", false));
+    add (new C ({ ParamIDs::randRoot, 1 }, "Key", Choices::roots, 0));
+    add (new C ({ ParamIDs::randScale, 1 }, "Scale", rf::Scales::names(), 1));
+    add (new C ({ ParamIDs::randRate, 1 }, "Random Rate", Choices::randRates, 3));
+    add (new AudioParameterInt ({ ParamIDs::randOctaves, 1 }, "Random Octaves", 1, 3, 1,
+                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return String (v) + " oct"; })));
+    add (new P ({ ParamIDs::randChance, 1 }, "Random Chance", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
+    add (new P ({ ParamIDs::randLength, 1 }, "Random Length", NormalisableRange<float> (0.05f, 1.0f), 0.5f, percent));
+    add (new AudioParameterInt ({ ParamIDs::randSeed, 1 }, "Random Pattern", 1, 9999, 1));
+    add (new B ({ ParamIDs::snapKeys, 1 }, "Snap Keys To Scale", false));
 
     return { p.begin(), p.end() };
 }

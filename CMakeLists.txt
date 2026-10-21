@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RaveForge VERSION 1.0.0)
+project(Zeygorg VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,13 +21,13 @@ else ()
     FetchContent_MakeAvailable(juce)
 endif ()
 
-option(RAVEFORGE_BUILD_TESTS "Build the offline render test" ON)
+option(ZEYGORG_BUILD_TESTS "Build the offline render test" ON)
 
 # The sample library is compiled into the binary (see Samples/).
 file(GLOB SampleFiles CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Samples/*/*.wav)
 list(SORT SampleFiles)
-juce_add_binary_data(RaveForgeSamples SOURCES ${SampleFiles})
-set_target_properties(RaveForgeSamples PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+juce_add_binary_data(ZeygorgSamples SOURCES ${SampleFiles})
+set_target_properties(ZeygorgSamples PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 set(PluginSources
     Source/PluginProcessor.cpp
@@ -42,11 +42,12 @@ set(PluginSources
     Source/DSP/Modulation.h
     Source/DSP/Delay.h
     Source/DSP/KeysSynth.h
+    Source/DSP/Randomiser.h
     Source/SampleLibrary.h)
 
-juce_add_plugin(RaveForge
+juce_add_plugin(Zeygorg
     COMPANY_NAME "Kebbell"
-    BUNDLE_ID com.kebbell.raveforge
+    BUNDLE_ID com.kebbell.zeygorg
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
@@ -54,23 +55,23 @@ juce_add_plugin(RaveForge
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE
     PLUGIN_MANUFACTURER_CODE Kbbl
-    PLUGIN_CODE RvFg
+    PLUGIN_CODE Zygg
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "RaveForge")
+    PRODUCT_NAME "Zeygorg")
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${PluginSources})
-target_sources(RaveForge PRIVATE ${PluginSources})
+target_sources(Zeygorg PRIVATE ${PluginSources})
 
-target_compile_definitions(RaveForge
+target_compile_definitions(Zeygorg
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0)
 
-target_link_libraries(RaveForge
+target_link_libraries(Zeygorg
     PRIVATE
-        RaveForgeSamples
+        ZeygorgSamples
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -78,19 +79,19 @@ target_link_libraries(RaveForge
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
-if (RAVEFORGE_BUILD_TESTS)
-    juce_add_console_app(RaveForgeTest PRODUCT_NAME "RaveForgeTest")
-    target_sources(RaveForgeTest PRIVATE
+if (ZEYGORG_BUILD_TESTS)
+    juce_add_console_app(ZeygorgTest PRODUCT_NAME "ZeygorgTest")
+    target_sources(ZeygorgTest PRIVATE
         Tests/RenderTest.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp)
-    target_include_directories(RaveForgeTest PRIVATE Source)
-    target_compile_definitions(RaveForgeTest PRIVATE
+    target_include_directories(ZeygorgTest PRIVATE Source)
+    target_compile_definitions(ZeygorgTest PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-        RAVEFORGE_TEST_BUILD=1)
-    target_link_libraries(RaveForgeTest PRIVATE
-        RaveForgeSamples
+        ZEYGORG_TEST_BUILD=1)
+    target_link_libraries(ZeygorgTest PRIVATE
+        ZeygorgSamples
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags

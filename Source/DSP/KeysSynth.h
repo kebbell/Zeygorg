@@ -8,7 +8,7 @@ namespace rf
 
 // Polyphonic keys played from the on-screen keyboard or host MIDI: either a
 // plain saw or the selected sample, pitched from its root note. It's mixed
-// into the input before the rave stack, which does the fattening.
+// into the input before the boost stack, which does the fattening.
 class KeysSynth
 {
 public:

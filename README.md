@@ -1,32 +1,34 @@
-# RaveForge
+# Zeygorg
 
 A JUCE audio effect (VST3 / AU / Standalone) in the spirit of Rave Generator:
-it turns any input into a big detuned "rave" stack, then runs it through a
+it turns any input (or its own keys and built-in samples) into a big detuned
+"boost" stack, then runs it through a
 filter, distortion, LFO, trance gate, delay and reverb.
 
-![RaveForge UI](docs/screenshot.png)
+![Zeygorg UI](docs/screenshot.png)
 
 ## Controls
 
 | Section | Controls |
 | --- | --- |
-| **Rave** | **Power** fades in up to 6 detuned copies of the input (widest pair first). **Width** spreads them across the stereo field. **Detune** (0–50 cents). Pitched layers: **Sub Oct**, **Fifth**, **Oct Up**. |
+| **Boost** | **Power** fades in up to 6 detuned copies of the input (widest pair first). **Width** spreads them across the stereo field. **Detune** (0–50 cents). Pitched layers: **Sub Oct**, **Fifth**, **Oct Up**. |
 | **Filter** | Low / band / high pass, **Cutoff**, **Resonance**. An envelope follower on the input moves the cutoff (**Env Amt**, **Attack**, **Release**). |
 | **Dirt** | **Drive** into Soft / Hard / Fold / Tube shapes, **Bits** reduction, **Downsample**, **Mix**. |
 | **LFO** | Sine / Triangle / Saw / Square / S&H. Tempo-synced (**Division**) or free (**Rate** in Hz). Routes to **Cutoff**, **Detune** and **Volume**. |
 | **Trance Gate** | 16 steps, 6 patterns, **Rate** (1/8, 1/16, 1/32), **Depth**, **Smooth**. |
 | **Delay** | Tempo-synced **Time**, **Feedback**, **Ping Pong**, **Tone** (darkens the repeats), **Mix**. |
 | **Reverb** | **Size**, **Damping**, **Width**, **Mix**. |
+| **Randomiser** | Plays random notes into the keys on the DAW's grid. **Key** and **Scale** (Major, Minor, Harmonic Minor, Dorian, Phrygian, Mixolydian, Minor/Major Pent, Blues, Chromatic), **Rate** (1/4 to 1/32, triplets), **Octaves**, **Chance** (how many steps play), **Length**. The pattern is a 16-step loop locked to the bar, so it repeats in time every pass; **New** rolls a different one (saved with the project). **Snap Keys** forces notes you play into the same key and scale. |
 | **Master** | **Dry/Wet**, **Output**. |
 | **Keys** | The keyboard (and host MIDI) plays either a saw or one of the 311 built-in samples into the start of the chain. **Source** (Saw / Samples), sample browser (`<` / `>` or click the name for a menu by category), **Transpose**, **Release**, **Level**. |
 
-The LFO, gate and delay follow the host tempo and bar position while the
+The randomiser, LFO, gate and delay follow the host tempo and bar position while the
 transport is playing, and run free at the host tempo (or 128 BPM) when it is stopped.
 
 Signal flow:
 
 ```
-input → rave stack → filter (env + LFO) → dirt → LFO volume × gate → delay → reverb → dry/wet → output
+input → boost stack → filter (env + LFO) → dirt → LFO volume × gate → delay → reverb → dry/wet → output
 ```
 
 ## Samples
@@ -57,7 +59,7 @@ cmake --build build --config Release
 To use a JUCE checkout you already have instead of downloading it, add
 `-DJUCE_DIR=/path/to/JUCE` to the first command.
 
-Built plugins land in `build/RaveForge_artefacts/Release/` (`VST3/`, `AU/`,
+Built plugins land in `build/Zeygorg_artefacts/Release/` (`VST3/`, `AU/`,
 `Standalone/`). Copy them to your plugin folder:
 
 - macOS: `~/Library/Audio/Plug-Ins/VST3` and `~/Library/Audio/Plug-Ins/Components`
@@ -69,13 +71,13 @@ libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libgl-dev` and friends).
 
 ## Testing
 
-`RaveForgeTest` renders a saw riff through the defaults, every parameter maxed,
+`ZeygorgTest` renders a saw riff through the defaults, every parameter maxed,
 a "showcase" patch and 20 random settings, and fails on any NaN/inf or runaway
 level. It also writes `defaults.wav`, `showcase.wav` and a `ui.png` snapshot.
 
 ```bash
-cmake --build build --target RaveForgeTest
-./build/RaveForgeTest_artefacts/Release/RaveForgeTest out
+cmake --build build --target ZeygorgTest
+./build/ZeygorgTest_artefacts/Release/ZeygorgTest out
 ```
 
 ## Layout
@@ -93,6 +95,7 @@ Source/
     Modulation.h      envelope follower, LFO, trance gate
     Delay.h           synced stereo / ping-pong delay
     KeysSynth.h       saw / sample voices for the keyboard
+    Randomiser.h      scales and the tempo-synced random note generator
   SampleLibrary.h     lists and decodes the built-in samples
 Samples/              the built-in WAVs
 Tests/RenderTest.cpp  offline render smoke test
