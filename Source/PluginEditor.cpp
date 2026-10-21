@@ -147,14 +147,15 @@ void GateDisplay::paint (juce::Graphics& g)
 //==============================================================================
 RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
     : AudioProcessorEditor (&p), raveProcessor (p),
-      rave ("Rave", Palette::accent, 3, 2),
+      rave ("Rave", Palette::accent2, 3, 2),
       filter ("Filter", Palette::accent2, 3, 2),
-      dirt ("Dirt", juce::Colour (0xffffa53d), 3, 2),
-      lfo ("LFO", juce::Colour (0xff9d6bff), 4, 2),
+      dirt ("Dirt", Palette::accent2, 3, 2),
+      lfo ("LFO", Palette::accent2, 4, 2),
       gate ("Trance Gate", Palette::accent2, 5, 2),
-      delay ("Delay", juce::Colour (0xff4dffa0), 3, 2),
-      reverb ("Reverb", juce::Colour (0xff6b9dff), 2, 2),
-      master ("Master", Palette::accent, 1, 2)
+      delay ("Delay", Palette::accent2, 3, 2),
+      reverb ("Reverb", Palette::accent2, 2, 2),
+      master ("Master", Palette::accent2, 2, 2),
+      keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     using namespace ParamIDs;
     using ui::Knob;
@@ -172,55 +173,66 @@ RaveForgeEditor::RaveForgeEditor (RaveForgeProcessor& p)
     rave.add<Knob> (s, octUp, "Oct Up", Palette::accent);
 
     filter.add<Choice> (s, fltType, "Type");
-    filter.add<Knob> (s, cutoff, "Cutoff", Palette::accent2);
-    filter.add<Knob> (s, resonance, "Resonance", Palette::accent2);
-    filter.add<Knob> (s, envAmount, "Env Amt", Palette::accent2);
-    filter.add<Knob> (s, envAttack, "Attack", Palette::accent2);
-    filter.add<Knob> (s, envRelease, "Release", Palette::accent2);
+    filter.add<Knob> (s, cutoff, "Cutoff", Palette::accent);
+    filter.add<Knob> (s, resonance, "Resonance", Palette::accent);
+    filter.add<Knob> (s, envAmount, "Env Amt", Palette::accent);
+    filter.add<Knob> (s, envAttack, "Attack", Palette::accent);
+    filter.add<Knob> (s, envRelease, "Release", Palette::accent);
 
-    auto orange = juce::Colour (0xffffa53d);
     dirt.add<Choice> (s, shape, "Shape");
-    dirt.add<Knob> (s, drive, "Drive", orange);
-    dirt.add<Knob> (s, dirtMix, "Mix", orange);
-    dirt.add<Knob> (s, bits, "Bits", orange);
-    dirt.add<Knob> (s, downsample, "Downsample", orange);
+    dirt.add<Knob> (s, drive, "Drive", Palette::accent);
+    dirt.add<Knob> (s, dirtMix, "Mix", Palette::accent);
+    dirt.add<Knob> (s, bits, "Bits", Palette::accent);
+    dirt.add<Knob> (s, downsample, "Downsample", Palette::accent);
 
-    auto purple = juce::Colour (0xff9d6bff);
     lfo.add<Choice> (s, lfoShape, "Shape");
     lfo.add<Toggle> (s, lfoSync, "Sync");
     lfoDivChoice = &lfo.add<Choice> (s, lfoDiv, "Division");
-    lfoRateKnob = &lfo.add<Knob> (s, lfoRate, "Rate", purple);
-    lfo.add<Knob> (s, lfoCutoff, "> Cutoff", purple);
-    lfo.add<Knob> (s, lfoDetune, "> Detune", purple);
-    lfo.add<Knob> (s, lfoAmp, "> Volume", purple);
+    lfoRateKnob = &lfo.add<Knob> (s, lfoRate, "Rate", Palette::accent);
+    lfo.add<Knob> (s, lfoCutoff, "> Cutoff", Palette::accent);
+    lfo.add<Knob> (s, lfoDetune, "> Detune", Palette::accent);
+    lfo.add<Knob> (s, lfoAmp, "> Volume", Palette::accent);
 
     gate.add<Toggle> (s, gateOn, "Gate On");
     gate.add<Choice> (s, gatePattern, "Pattern");
     gate.add<Choice> (s, gateRate, "Rate");
-    gate.add<Knob> (s, gateDepth, "Depth", Palette::accent2);
-    gate.add<Knob> (s, gateSmooth, "Smooth", Palette::accent2);
+    gate.add<Knob> (s, gateDepth, "Depth", Palette::accent);
+    gate.add<Knob> (s, gateSmooth, "Smooth", Palette::accent);
     gate.setFooter (&gateDisplay);
 
-    auto green = juce::Colour (0xff4dffa0);
     delay.add<Choice> (s, dlyDiv, "Time");
     delay.add<Toggle> (s, dlyPingPong, "Ping Pong");
-    delay.add<Knob> (s, dlyFeedback, "Feedback", green);
-    delay.add<Knob> (s, dlyTone, "Tone", green);
-    delay.add<Knob> (s, dlyMix, "Mix", green);
+    delay.add<Knob> (s, dlyFeedback, "Feedback", Palette::accent);
+    delay.add<Knob> (s, dlyTone, "Tone", Palette::accent);
+    delay.add<Knob> (s, dlyMix, "Mix", Palette::accent);
 
-    auto blue = juce::Colour (0xff6b9dff);
-    reverb.add<Knob> (s, revSize, "Size", blue);
-    reverb.add<Knob> (s, revDamp, "Damping", blue);
-    reverb.add<Knob> (s, revWidth, "Width", blue);
-    reverb.add<Knob> (s, revMix, "Mix", blue);
+    reverb.add<Knob> (s, revSize, "Size", Palette::accent);
+    reverb.add<Knob> (s, revDamp, "Damping", Palette::accent);
+    reverb.add<Knob> (s, revWidth, "Width", Palette::accent);
+    reverb.add<Knob> (s, revMix, "Mix", Palette::accent);
 
     master.add<Knob> (s, ParamIDs::mix, "Dry/Wet", Palette::accent);
     master.add<Knob> (s, output, "Output", Palette::accent);
+    master.add<Knob> (s, keysLevel, "Keys", Palette::accent);
 
     for (auto* c : { &rave, &filter, &dirt, &lfo, &gate, &delay, &reverb, &master })
         addAndMakeVisible (c);
 
-    setSize (1120, 600);
+    keyboard.setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour (0xffd0d0d0));
+    keyboard.setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour (0xff1a1a1a));
+    keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour (0xff3a3a3a));
+    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, juce::Colour (0xff6e6e6e));
+    keyboard.setColour (juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, juce::Colour (0x22000000));
+    keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::transparentBlack);
+    keyboard.setColour (juce::MidiKeyboardComponent::upDownButtonBackgroundColourId, Palette::panel);
+    keyboard.setColour (juce::MidiKeyboardComponent::upDownButtonArrowColourId, Palette::dimText);
+    keyboard.setColour (juce::MidiKeyboardComponent::textLabelColourId, juce::Colour (0xff555555));
+    keyboard.setAvailableRange (24, 96);
+    keyboard.setScrollButtonsVisible (false);
+    keyboard.setWantsKeyboardFocus (false);
+    addAndMakeVisible (keyboard);
+
+    setSize (1120, 700);
     timerCallback();
     startTimerHz (30);
 }
@@ -235,9 +247,7 @@ void RaveForgeEditor::paint (juce::Graphics& g)
     g.fillAll (Palette::background);
 
     auto header = getLocalBounds().removeFromTop (48).reduced (18, 0);
-    juce::ColourGradient grad (Palette::accent, (float) header.getX(), 0.0f,
-                               Palette::accent2, (float) header.getX() + 200.0f, 0.0f, false);
-    g.setGradientFill (grad);
+    g.setColour (Palette::text);
     g.setFont (juce::FontOptions (26.0f, juce::Font::bold));
     g.drawText ("RAVEFORGE", header, juce::Justification::centredLeft);
 
@@ -251,6 +261,11 @@ void RaveForgeEditor::resized()
 {
     auto area = getLocalBounds().reduced (12);
     area.removeFromTop (40);
+
+    // C1..C7 is 43 white keys; size them so the whole range fills the width.
+    keyboard.setBounds (area.removeFromBottom (88));
+    keyboard.setKeyWidth ((float) keyboard.getWidth() / 43.0f);
+    area.removeFromBottom (10);
 
     auto layoutRow = [] (juce::Rectangle<int> row, std::initializer_list<ui::Section*> sections)
     {

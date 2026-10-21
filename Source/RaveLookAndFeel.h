@@ -4,14 +4,15 @@
 
 namespace Palette
 {
-    inline const juce::Colour background { 0xff0e0f14 };
-    inline const juce::Colour panel      { 0xff171922 };
-    inline const juce::Colour panelEdge  { 0xff262a36 };
-    inline const juce::Colour track      { 0xff2b2f3d };
-    inline const juce::Colour text       { 0xffd9dce6 };
-    inline const juce::Colour dimText    { 0xff8a90a3 };
-    inline const juce::Colour accent     { 0xffff3dbb }; // hot pink
-    inline const juce::Colour accent2    { 0xff35e0ff }; // cyan
+    // Monochrome: near-black panels, greys, and white for anything "on".
+    inline const juce::Colour background { 0xff0a0a0a };
+    inline const juce::Colour panel      { 0xff141414 };
+    inline const juce::Colour panelEdge  { 0xff262626 };
+    inline const juce::Colour track      { 0xff2a2a2a };
+    inline const juce::Colour text       { 0xffe6e6e6 };
+    inline const juce::Colour dimText    { 0xff8c8c8c };
+    inline const juce::Colour accent     { 0xffe6e6e6 };
+    inline const juce::Colour accent2    { 0xffa6a6a6 };
 }
 
 class RaveLookAndFeel : public juce::LookAndFeel_V4
@@ -26,10 +27,10 @@ public:
         setColour (juce::ComboBox::backgroundColourId, Palette::track);
         setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
         setColour (juce::ComboBox::textColourId, Palette::text);
-        setColour (juce::ComboBox::arrowColourId, Palette::accent2);
+        setColour (juce::ComboBox::arrowColourId, Palette::dimText);
         setColour (juce::PopupMenu::backgroundColourId, Palette::panel);
         setColour (juce::PopupMenu::textColourId, Palette::text);
-        setColour (juce::PopupMenu::highlightedBackgroundColourId, Palette::accent.withAlpha (0.35f));
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, Palette::track.brighter (0.2f));
         setColour (juce::ToggleButton::textColourId, Palette::text);
         setColour (juce::ToggleButton::tickColourId, Palette::accent);
         setColour (juce::ToggleButton::tickDisabledColourId, Palette::dimText);
@@ -58,7 +59,7 @@ public:
         auto fromAngle = slider.getMinimum() < 0.0 ? (startAngle + endAngle) * 0.5f : startAngle;
         juce::Path arc;
         arc.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, fromAngle, angle, true);
-        g.setColour (colour.withAlpha (0.25f));
+        g.setColour (colour.withAlpha (0.08f));
         g.strokePath (arc, { lineW * 2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded });
         g.setColour (colour);
         g.strokePath (arc, { lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded });
@@ -99,9 +100,9 @@ public:
     {
         auto r = b.getLocalBounds().toFloat().reduced (1.0f);
         auto on = b.getToggleState();
-        g.setColour (on ? Palette::accent.withAlpha (0.85f) : Palette::track.brighter (highlighted ? 0.15f : 0.0f));
+        g.setColour (on ? Palette::accent : Palette::track.brighter (highlighted ? 0.15f : 0.0f));
         g.fillRoundedRectangle (r, 4.0f);
-        g.setColour (on ? juce::Colours::white : Palette::dimText);
+        g.setColour (on ? Palette::background : Palette::dimText);
         g.setFont (juce::FontOptions (12.5f, juce::Font::bold));
         g.drawFittedText (b.getButtonText(), r.toNearestInt(), juce::Justification::centred, 1);
     }

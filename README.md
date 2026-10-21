@@ -17,7 +17,8 @@ filter, distortion, LFO, trance gate, delay and reverb.
 | **Trance Gate** | 16 steps, 6 patterns, **Rate** (1/8, 1/16, 1/32), **Depth**, **Smooth**. |
 | **Delay** | Tempo-synced **Time**, **Feedback**, **Ping Pong**, **Tone** (darkens the repeats), **Mix**. |
 | **Reverb** | **Size**, **Damping**, **Width**, **Mix**. |
-| **Master** | **Dry/Wet**, **Output**. |
+| **Master** | **Dry/Wet**, **Output**, **Keys** (level of the built-in saw played from the keyboard). |
+| **Keyboard** | Plays a simple saw synth (also from host MIDI) into the start of the chain, so you can hear the effect without any input. |
 
 The LFO, gate and delay follow the host tempo and bar position while the
 transport is playing, and run free at the host tempo (or 128 BPM) when it is stopped.

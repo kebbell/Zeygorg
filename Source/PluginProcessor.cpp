@@ -26,6 +26,7 @@ bool RaveForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
 void RaveForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare (sampleRate, samplesPerBlock);
+    keys.prepare (sampleRate, samplesPerBlock);
 }
 
 rf::Engine::Settings RaveForgeProcessor::readSettings() const
@@ -83,7 +84,7 @@ rf::Engine::Settings RaveForgeProcessor::readSettings() const
     return s;
 }
 
-void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -104,6 +105,10 @@ void RaveForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             }
         }
     }
+
+    // Merge on-screen key presses into the host MIDI, then play the keys synth into the input.
+    keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
+    keys.renderAdding (buffer, midi, get (ParamIDs::keysLevel));
 
     engine.process (buffer, readSettings(), transport);
 }

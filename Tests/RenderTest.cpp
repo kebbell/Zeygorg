@@ -139,6 +139,19 @@ int main (int argc, char** argv)
     report ("showcase", render (proc, input, out));
     writeWav (outDir.getChildFile ("showcase.wav"), out);
 
+    // Keys only: silent input, a chord held on the on-screen keyboard state.
+    {
+        juce::AudioBuffer<float> silence (2, input.getNumSamples());
+        silence.clear();
+        for (auto note : { 45, 52, 57 })
+            proc.keyboardState.noteOn (1, note, 0.9f);
+        auto r = render (proc, silence, out);
+        proc.keyboardState.allNotesOff (1);
+        r.ok = r.ok && r.peak > 0.05f; // the synth must actually sound
+        report ("keys", r);
+        writeWav (outDir.getChildFile ("keys.wav"), out);
+    }
+
     juce::Random rng (1234);
     for (int i = 0; i < 20; ++i)
     {

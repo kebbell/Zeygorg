@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "RaveLookAndFeel.h"
+#include <juce_audio_utils/juce_audio_utils.h>
 
 namespace ui
 {
@@ -107,6 +108,7 @@ private:
 
     ui::Section rave, filter, dirt, lfo, gate, delay, reverb, master;
     ui::GateDisplay gateDisplay;
+    juce::MidiKeyboardComponent keyboard;
 
     ui::Knob* lfoRateKnob = nullptr;
     ui::Choice* lfoDivChoice = nullptr;

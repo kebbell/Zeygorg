@@ -34,13 +34,14 @@ set(PluginSources
     Source/DSP/RaveStack.h
     Source/DSP/Dirt.h
     Source/DSP/Modulation.h
-    Source/DSP/Delay.h)
+    Source/DSP/Delay.h
+    Source/DSP/KeysSynth.h)
 
 juce_add_plugin(RaveForge
     COMPANY_NAME "Kebbell"
     BUNDLE_ID com.kebbell.raveforge
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE

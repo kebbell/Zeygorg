@@ -61,6 +61,7 @@ namespace ParamIDs
     // Master
     inline constexpr auto mix        = "mix";
     inline constexpr auto output     = "output";
+    inline constexpr auto keysLevel  = "keysLevel";
 }
 
 namespace Choices
@@ -160,6 +161,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
 
     add (new P ({ ParamIDs::mix, 1 }, "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent));
     add (new P ({ ParamIDs::output, 1 }, "Output", NormalisableRange<float> (-24.0f, 12.0f), 0.0f, db));
+    add (new P ({ ParamIDs::keysLevel, 1 }, "Keys Level", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
 
     return { p.begin(), p.end() };
 }

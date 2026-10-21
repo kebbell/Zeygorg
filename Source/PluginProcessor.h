@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "DSP/Engine.h"
+#include "DSP/KeysSynth.h"
 #include "Parameters.h"
 #include <map>
 #include <string_view>
@@ -21,7 +22,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "RaveForge"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 8.0; }
@@ -38,6 +39,9 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     rf::Engine engine;
 
+    // Shared with the editor's on-screen keyboard.
+    juce::MidiKeyboardState keyboardState;
+
 private:
     rf::Engine::Settings readSettings() const;
     float get (std::string_view id) const { return params.find (id)->second->load(); }
@@ -46,6 +50,8 @@ private:
     // Keyed by views into `paramIDs` so lookups on the audio thread don't allocate.
     juce::StringArray paramIDs;
     std::map<std::string_view, std::atomic<float>*, std::less<>> params;
+
+    rf::KeysSynth keys;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RaveForgeProcessor)
 };
