@@ -80,6 +80,19 @@ cmake --build build --target ZeygorgTest
 ./build/ZeygorgTest_artefacts/Release/ZeygorgTest out
 ```
 
+`ZeygorgLoadTest` loads the built bundles the way a DAW does (scan, instantiate,
+play a MIDI note, open the editor):
+
+```bash
+./build/ZeygorgLoadTest_artefacts/Release/ZeygorgLoadTest \
+    "$PWD/build/Zeygorg_artefacts/Release/VST3/Zeygorg.vst3" \
+    "$PWD/build/Zeygorg_artefacts/Release/AU/Zeygorg.component"
+```
+
+On macOS every bundle is ad-hoc re-signed after it's built. Without that the
+signature is invalid and Ableton's scanner rejects the plugin ("a sealed
+resource is missing or invalid").
+
 ## Layout
 
 ```
@@ -99,6 +112,7 @@ Source/
   SampleLibrary.h     lists and decodes the built-in samples
 Samples/              the built-in WAVs
 Tests/RenderTest.cpp  offline render smoke test
+Tests/LoadTest.cpp    loads built plugins like a host
 ```
 
 ## Notes

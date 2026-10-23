@@ -79,6 +79,17 @@ target_link_libraries(Zeygorg
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
+# The linker only ad-hoc signs the binary, and JUCE adds files (moduleinfo.json)
+# afterwards, which leaves the bundles with invalid signatures that hosts like
+# Live refuse to load. Re-sign each whole bundle once it's complete.
+if (APPLE)
+    foreach (format VST3 AU Standalone)
+        add_custom_command(TARGET Zeygorg_${format} POST_BUILD
+            COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:Zeygorg_${format}>"
+            VERBATIM)
+    endforeach ()
+endif ()
+
 if (ZEYGORG_BUILD_TESTS)
     juce_add_console_app(ZeygorgTest PRODUCT_NAME "ZeygorgTest")
     target_sources(ZeygorgTest PRIVATE
@@ -94,6 +105,21 @@ if (ZEYGORG_BUILD_TESTS)
         ZeygorgSamples
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+
+    # Loads the built bundles as a host would (see Tests/LoadTest.cpp).
+    juce_add_console_app(ZeygorgLoadTest PRODUCT_NAME "ZeygorgLoadTest")
+    target_sources(ZeygorgLoadTest PRIVATE Tests/LoadTest.cpp)
+    target_compile_definitions(ZeygorgLoadTest PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_PLUGINHOST_VST3=1
+        JUCE_PLUGINHOST_AU=1)
+    target_link_libraries(ZeygorgLoadTest PRIVATE
+        juce::juce_audio_processors
+        juce::juce_gui_basics
+        "$<$<PLATFORM_ID:Darwin>:-framework CoreAudioKit>"
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 endif ()
