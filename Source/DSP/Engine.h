@@ -4,6 +4,7 @@
 #include "Dirt.h"
 #include "Modulation.h"
 #include "Delay.h"
+#include "Dynamics.h"
 #include <atomic>
 
 namespace rf
@@ -11,7 +12,7 @@ namespace rf
 
 // The whole effect chain:
 //   input -> boost stack -> filter (env + LFO) -> dirt -> LFO volume x gate
-//         -> delay -> reverb -> dry/wet -> output
+//         -> delay -> reverb -> pump -> compressor -> dry/wet -> output -> limiter
 class Engine
 {
 public:
@@ -45,6 +46,12 @@ public:
 
         float revSize = 0.6f, revDamp = 0.4f, revWidth = 1.0f, revMix = 0.0f;
 
+        bool pumpOn = false;
+        double pumpBeats = 1.0;
+        float pumpDepth = 0.6f, pumpRelease = 0.5f;
+
+        Dynamics::Settings dynamics;
+
         float mix = 1.0f;
         float outputDb = 0.0f;
     };
@@ -61,11 +68,13 @@ public:
         sampleRate = sr;
 
         stack.prepare (sr);
-        dirt.prepare (sr);
+        dirt.prepare (sr, maxBlockSize);
         env.prepare (sr);
         lfo.prepare (sr);
         gate.prepare (sr);
         delay.prepare (sr);
+        pump.prepare (sr);
+        dynamics.prepare (sr, maxBlockSize);
 
         filter.prepare ({ sr, (juce::uint32) maxBlockSize, 2 });
         filter.reset();
@@ -74,6 +83,8 @@ public:
         reverb.reset();
 
         dryBuffer.setSize (2, maxBlockSize);
+        beats.resize ((size_t) maxBlockSize);
+        lfoValues.resize ((size_t) maxBlockSize);
         mix.reset (sr, 0.03);
         outGain.reset (sr, 0.03);
         freeBeat = 0.0;
@@ -87,6 +98,8 @@ public:
         lfo.reset();
         gate.reset();
         delay.reset();
+        pump.reset();
+        dynamics.reset();
         filter.reset();
         reverb.reset();
     }
@@ -98,8 +111,13 @@ public:
         if (numSamples == 0 || numChannels == 0)
             return;
 
-        if (dryBuffer.getNumSamples() < numSamples)
+        if (dryBuffer.getNumSamples() < numSamples || beats.size() < (size_t) numSamples)
+        {
+            // Bigger than prepareToPlay promised: grow (rare, and better than dropping audio).
             dryBuffer.setSize (2, numSamples, false, false, true);
+            beats.resize ((size_t) numSamples);
+            lfoValues.resize ((size_t) numSamples);
+        }
 
         for (int ch = 0; ch < numChannels; ++ch)
             dryBuffer.copyFrom (ch, 0, buffer, ch, 0, numSamples);
@@ -115,14 +133,15 @@ public:
         auto* left  = buffer.getWritePointer (0);
         auto* right = numChannels > 1 ? buffer.getWritePointer (1) : nullptr;
 
-        float lfoValue = 0.0f;
-
+        // Stage 1: stack and filter.
         for (int i = 0; i < numSamples; ++i)
         {
             auto beat = beat0 + beatsPerSample * i;
+            beats[(size_t) i] = beat;
 
-            lfoValue = s.lfoSync ? lfo.processSynced (beat, s.lfoBeats)
-                                 : lfo.processFree (s.lfoRateHz);
+            auto lfoValue = s.lfoSync ? lfo.processSynced (beat, s.lfoBeats)
+                                      : lfo.processFree (s.lfoRateHz);
+            lfoValues[(size_t) i] = lfoValue;
 
             auto inL = left[i];
             auto inR = right != nullptr ? right[i] : inL;
@@ -141,29 +160,61 @@ public:
                 filter.setCutoffFrequency (fc);
             }
 
-            l = filter.processSample (0, l);
+            left[i] = filter.processSample (0, l);
             r = filter.processSample (1, r);
+            if (right != nullptr)
+                right[i] = r;
+            else
+                left[i] = 0.5f * (left[i] + r);
+        }
 
-            dirt.process (l, r);
+        // Stage 2: dirt, as a block so it can be oversampled.
+        if (! dirt.isBypassed())
+            dirt.process (buffer, numChannels, numSamples);
+
+        // Stage 3: LFO volume, gate, delay.
+        for (int i = 0; i < numSamples; ++i)
+        {
+            auto l = left[i];
+            auto r = right != nullptr ? right[i] : l;
 
             // LFO > Volume dips the level on the LFO's low half (full level at +1).
-            auto amp = (1.0f - s.lfoToAmp * (0.5f - 0.5f * lfoValue)) * gate.process (beat);
+            auto amp = (1.0f - s.lfoToAmp * (0.5f - 0.5f * lfoValues[(size_t) i])) * gate.process (beats[(size_t) i]);
             l *= amp;
             r *= amp;
 
             delay.process (l, r);
 
-            left[i] = l;
             if (right != nullptr)
+            {
+                left[i] = l;
                 right[i] = r;
+            }
             else
+            {
                 left[i] = 0.5f * (l + r);
+            }
         }
 
         if (right != nullptr)
             reverb.processStereo (left, right, numSamples);
         else
             reverb.processMono (left, numSamples);
+
+        auto pumpGain = 1.0f;
+        if (s.pumpOn)
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                pumpGain = pump.process (beats[(size_t) i], s.pumpBeats, s.pumpDepth, s.pumpRelease);
+                left[i] *= pumpGain;
+                if (right != nullptr)
+                    right[i] *= pumpGain;
+            }
+        }
+        currentPump.store (pumpGain);
+
+        dynamics.processCompressor (buffer, numChannels, numSamples);
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -178,15 +229,45 @@ public:
             }
         }
 
+        dynamics.processLimiter (buffer, numChannels, numSamples);
+
         currentGateStep.store (gate.stepAt (beat0 + beatsPerSample * (numSamples - 1)));
-        currentLfo.store (lfoValue);
+        currentLfo.store (lfoValues[(size_t) numSamples - 1]);
+        pushScope (buffer, numChannels, numSamples);
     }
 
     // Read by the editor for its displays.
     std::atomic<int> currentGateStep { 0 };
     std::atomic<float> currentLfo { 0.0f };
+    std::atomic<float> currentPump { 1.0f };
+    std::atomic<float> peakLeft { 0.0f }, peakRight { 0.0f };
+
+    // The last few thousand output samples (mono), for the scope and spectrum.
+    static constexpr int scopeSize = 4096;
+    std::array<float, scopeSize> scope {};
+    std::atomic<int> scopeWrite { 0 };
+
+    float gainReductionDb() const { return dynamics.gainReductionDb.load(); }
 
 private:
+    void pushScope (const juce::AudioBuffer<float>& buffer, int numChannels, int numSamples)
+    {
+        auto w = scopeWrite.load (std::memory_order_relaxed);
+        float pl = 0.0f, pr = 0.0f;
+        auto* l = buffer.getReadPointer (0);
+        auto* r = buffer.getReadPointer (numChannels > 1 ? 1 : 0);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            scope[(size_t) w] = 0.5f * (l[i] + r[i]);
+            w = (w + 1) & (scopeSize - 1);
+            pl = juce::jmax (pl, std::abs (l[i]));
+            pr = juce::jmax (pr, std::abs (r[i]));
+        }
+        scopeWrite.store (w, std::memory_order_release);
+        peakLeft.store (juce::jmax (pl, peakLeft.load() * 0.9f));
+        peakRight.store (juce::jmax (pr, peakRight.load() * 0.9f));
+    }
+
     void applySettings (const Settings& s)
     {
         stack.setTargets (s.stack);
@@ -194,6 +275,7 @@ private:
         env.setTimes (s.envAttackMs, s.envReleaseMs);
         lfo.setShape (s.lfoShape);
         gate.setSettings (s.gateOn, s.gatePattern, s.gateStepBeats, s.gateDepth, s.gateSmooth);
+        dynamics.setSettings (s.dynamics);
 
         using T = juce::dsp::StateVariableTPTFilterType;
         filter.setType (s.filterType == 1 ? T::bandpass : s.filterType == 2 ? T::highpass : T::lowpass);
@@ -220,10 +302,14 @@ private:
     Lfo lfo;
     TranceGate gate;
     StereoDelay delay;
+    Pump pump;
+    Dynamics dynamics;
     juce::dsp::StateVariableTPTFilter<float> filter;
     juce::Reverb reverb;
 
     juce::AudioBuffer<float> dryBuffer;
+    std::vector<double> beats;
+    std::vector<float> lfoValues;
     juce::SmoothedValue<float> mix { 1.0f }, outGain { 1.0f };
 };
 

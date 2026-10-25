@@ -35,15 +35,41 @@ set(PluginSources
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/Parameters.h
-    Source/RaveLookAndFeel.h
+    Source/Presets.h
+    Source/FactoryPresets.h
+    Source/SampleLibrary.h
     Source/DSP/Engine.h
     Source/DSP/RaveStack.h
     Source/DSP/Dirt.h
     Source/DSP/Modulation.h
     Source/DSP/Delay.h
-    Source/DSP/KeysSynth.h
-    Source/DSP/Randomiser.h
-    Source/SampleLibrary.h)
+    Source/DSP/Dynamics.h
+    Source/DSP/Sample.h
+    Source/DSP/Synth.h
+    Source/DSP/Sequencer.h
+    Source/DSP/NoteFx.h
+    Source/UI/Theme.h
+    Source/UI/Widgets.h
+    Source/UI/Widgets.cpp
+    Source/UI/Displays.h
+    Source/UI/Displays.cpp
+    Source/UI/LayerPanel.h
+    Source/UI/LayerPanel.cpp
+    Source/UI/SequencerPanel.h
+    Source/UI/SequencerPanel.cpp
+    Source/UI/PresetBar.h
+    Source/UI/PresetBar.cpp
+    Source/UI/Pages.h
+    Source/UI/Pages.cpp)
+
+set(EditorSources
+    Source/PluginEditor.cpp
+    Source/UI/Widgets.cpp
+    Source/UI/Displays.cpp
+    Source/UI/LayerPanel.cpp
+    Source/UI/SequencerPanel.cpp
+    Source/UI/PresetBar.cpp
+    Source/UI/Pages.cpp)
 
 juce_add_plugin(Zeygorg
     COMPANY_NAME "Kebbell"
@@ -95,12 +121,13 @@ if (ZEYGORG_BUILD_TESTS)
     target_sources(ZeygorgTest PRIVATE
         Tests/RenderTest.cpp
         Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp)
+        ${EditorSources})
     target_include_directories(ZeygorgTest PRIVATE Source)
     target_compile_definitions(ZeygorgTest PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-        ZEYGORG_TEST_BUILD=1)
+        ZEYGORG_TEST_BUILD=1
+        JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(ZeygorgTest PRIVATE
         ZeygorgSamples
         juce::juce_audio_utils

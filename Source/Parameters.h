@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SampleLibrary.h"
-#include "DSP/Randomiser.h"
+#include "DSP/NoteFx.h"
 
 // Parameter IDs, choice lists and the APVTS layout. Everything the engine and
 // the editor need to agree on lives here.
@@ -64,14 +64,27 @@ namespace ParamIDs
     inline constexpr auto mix        = "mix";
     inline constexpr auto output     = "output";
 
-    // Keys (on-screen keyboard / MIDI)
-    inline constexpr auto keysLevel  = "keysLevel";
-    inline constexpr auto keysSource = "keysSource";
-    inline constexpr auto sampleIndex= "sampleIndex";
-    inline constexpr auto keysTranspose = "keysTranspose";
-    inline constexpr auto keysRelease= "keysRelease";
+    // Synth (shared by the three layers)
+    inline constexpr auto ampAttack  = "ampAttack";
+    inline constexpr auto ampDecay   = "ampDecay";
+    inline constexpr auto ampSustain = "ampSustain";
+    inline constexpr auto ampRelease = "ampRelease";
+    inline constexpr auto vFltType   = "vFltType";
+    inline constexpr auto vCutoff    = "vCutoff";
+    inline constexpr auto vReso      = "vReso";
+    inline constexpr auto vEnvAmt    = "vEnvAmt";
+    inline constexpr auto vKeyTrack  = "vKeyTrack";
+    inline constexpr auto fltAttack  = "fltAttack";
+    inline constexpr auto fltDecay   = "fltDecay";
+    inline constexpr auto fltSustain = "fltSustain";
+    inline constexpr auto fltRelease = "fltRelease";
+    inline constexpr auto voiceMode  = "voiceMode";
+    inline constexpr auto glide      = "glide";
+    inline constexpr auto velSens    = "velSens";
+    inline constexpr auto synthTranspose = "synthTranspose";
+    inline constexpr auto synthLevel = "synthLevel";
 
-    // MIDI randomiser
+    // Sequencer (pattern on the DAW grid) + key snapping
     inline constexpr auto randOn     = "randOn";
     inline constexpr auto randRoot   = "randRoot";
     inline constexpr auto randScale  = "randScale";
@@ -79,15 +92,69 @@ namespace ParamIDs
     inline constexpr auto randOctaves= "randOctaves";
     inline constexpr auto randChance = "randChance";
     inline constexpr auto randLength = "randLength";
-    inline constexpr auto randSeed   = "randSeed";
+    inline constexpr auto seqSteps   = "seqSteps";
+    inline constexpr auto seqSwing   = "seqSwing";
     inline constexpr auto snapKeys   = "snapKeys";
+
+    // Arp + chord
+    inline constexpr auto arpOn      = "arpOn";
+    inline constexpr auto arpMode    = "arpMode";
+    inline constexpr auto arpRate    = "arpRate";
+    inline constexpr auto arpOctaves = "arpOctaves";
+    inline constexpr auto arpGate    = "arpGate";
+    inline constexpr auto arpLatch   = "arpLatch";
+    inline constexpr auto chordMode  = "chordMode";
+
+    // Extra FX
+    inline constexpr auto dirtOS     = "dirtOS";
+    inline constexpr auto pumpOn     = "pumpOn";
+    inline constexpr auto pumpRate   = "pumpRate";
+    inline constexpr auto pumpDepth  = "pumpDepth";
+    inline constexpr auto pumpRelease= "pumpRelease";
+    inline constexpr auto compOn     = "compOn";
+    inline constexpr auto compThresh = "compThresh";
+    inline constexpr auto compRatio  = "compRatio";
+    inline constexpr auto compAttack = "compAttack";
+    inline constexpr auto compRelease= "compRelease";
+    inline constexpr auto compMakeup = "compMakeup";
+    inline constexpr auto limitOn    = "limitOn";
+}
+
+// Per-layer parameters: IDs are "l1wave", "l2level" and so on.
+namespace LayerParam
+{
+    enum Field { on, wave, sample, level, pan, octave, semi, fine, unison, detune, spread,
+                 warp, speed, sync, grain, start, end, loop, reverse, numFields };
+
+    inline const juce::String& id (int layer, Field f)
+    {
+        static const auto table = []
+        {
+            static const char* suffixes[] { "on", "wave", "sample", "level", "pan", "octave", "semi", "fine", "unison",
+                                            "detune", "spread", "warp", "speed", "sync", "grain", "start", "end",
+                                            "loop", "reverse" };
+            std::array<std::array<juce::String, numFields>, 3> t;
+            for (int l = 0; l < 3; ++l)
+                for (int field = 0; field < numFields; ++field)
+                    t[(size_t) l][(size_t) field] = "l" + juce::String (l + 1) + suffixes[field];
+            return t;
+        }();
+        return table[(size_t) layer][(size_t) f];
+    }
 }
 
 namespace Choices
 {
     inline const juce::StringArray filterTypes { "Low Pass", "Band Pass", "High Pass" };
     inline const juce::StringArray dirtShapes  { "Soft", "Hard", "Fold", "Tube" };
-    inline const juce::StringArray keysSources { "Saw", "Samples" };
+    inline const juce::StringArray waves       { "Supersaw", "Saw", "Square", "Triangle", "Sine", "Noise", "Sample" };
+    inline const juce::StringArray warps       { "Repitch", "Stretch", "Tempo Sync" };
+    inline const juce::StringArray syncLengths { "1/2 Beat", "1 Beat", "2 Beats", "1 Bar", "2 Bars", "4 Bars", "8 Bars" };
+    inline constexpr double syncLengthBeats[]  { 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0 };
+    inline const juce::StringArray voiceModes  { "Poly", "Mono", "Legato" };
+    inline const juce::StringArray pumpRates   { "1/8", "1/4", "1/2", "1 Bar" };
+    inline constexpr double pumpRateBeats[]    { 0.5, 1.0, 2.0, 4.0 };
+    inline const juce::StringArray oversampling { "Off", "2x", "4x" };
     inline const juce::StringArray roots       { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray randRates   { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
     inline constexpr double randRateBeats[]    { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 };
@@ -118,8 +185,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
                          .withValueFromStringFunction ([] (const String& s) { return s.getFloatValue() / 100.0f; });
     auto hz = Attr().withStringFromValueFunction ([] (float v, int) { return v >= 1000.0f ? String (v / 1000.0f, 2) + " kHz" : String (roundToInt (v)) + " Hz"; })
                     .withValueFromStringFunction ([] (const String& s) { return s.containsIgnoreCase ("k") ? s.getFloatValue() * 1000.0f : s.getFloatValue(); });
-    auto ms = Attr().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " ms"; })
-                    .withValueFromStringFunction ([] (const String& s) { return s.getFloatValue(); });
+    auto ms = Attr().withStringFromValueFunction ([] (float v, int)
+                    {
+                        return v >= 1000.0f ? String (v / 1000.0f, 2) + " s" : v < 10.0f ? String (v, 1) + " ms" : String (roundToInt (v)) + " ms";
+                    })
+                    .withValueFromStringFunction ([] (const String& s) { return s.trim().endsWith ("s") && ! s.contains ("ms") ? s.getFloatValue() * 1000.0f : s.getFloatValue(); });
     auto db = Attr().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })
                     .withValueFromStringFunction ([] (const String& s) { return s.getFloatValue(); });
 
@@ -184,31 +254,113 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
 
     add (new P ({ ParamIDs::mix, 1 }, "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent));
     add (new P ({ ParamIDs::output, 1 }, "Output", NormalisableRange<float> (-24.0f, 12.0f), 0.0f, db));
-    add (new P ({ ParamIDs::keysLevel, 1 }, "Keys Level", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
-    add (new C ({ ParamIDs::keysSource, 1 }, "Keys Source", Choices::keysSources, 1));
-    add (new AudioParameterInt ({ ParamIDs::sampleIndex, 1 }, "Sample", 0, juce::jmax (0, SampleLibrary::get().size() - 1), 0,
-                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
-                                {
-                                    const auto& e = SampleLibrary::get()[v];
-                                    return e.category + " " + e.name;
-                                })));
-    add (new AudioParameterInt ({ ParamIDs::keysTranspose, 1 }, "Keys Transpose", -24, 24, 0,
-                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
-                                {
-                                    return (v > 0 ? "+" : "") + String (v) + " st";
-                                })));
-    add (new P ({ ParamIDs::keysRelease, 1 }, "Keys Release", freqRange (5.0f, 2000.0f, 200.0f), 250.0f, ms));
+    add (new C ({ ParamIDs::dirtOS, 1 }, "Dirt Oversampling", Choices::oversampling, 1));
 
-    add (new B ({ ParamIDs::randOn, 1 }, "Randomiser On", false));
+    // Layers
+    auto cents = Attr().withStringFromValueFunction ([] (float v, int) { auto c = roundToInt (v); return (c > 0 ? "+" : "") + String (c) + " ct"; });
+    auto panAttr = Attr().withStringFromValueFunction ([] (float v, int)
+    {
+        auto amount = roundToInt (v * 50.0f);
+        return amount == 0 ? String ("C") : String (std::abs (amount)) + (amount < 0 ? "L" : "R");
+    });
+    auto speedAttr = Attr().withStringFromValueFunction ([] (float v, int) { return String (v, 2) + "x"; });
+    auto semis = [] (const char* unit)
+    {
+        return AudioParameterIntAttributes().withStringFromValueFunction ([unit] (int v, int) { return (v > 0 ? "+" : "") + String (v) + unit; });
+    };
+    auto lastSample = juce::jmax (0, SampleLibrary::get().size() - 1);
+
+    for (int l = 0; l < 3; ++l)
+    {
+        using LP = LayerParam::Field;
+        auto name = [l] (const char* n) { return "Layer " + String (l + 1) + " " + n; };
+        auto pid = [l] (LP f) { return ParameterID { LayerParam::id (l, f), 1 }; };
+
+        add (new B (pid (LP::on), name ("On"), l == 0));
+        add (new C (pid (LP::wave), name ("Wave"), Choices::waves, l == 0 ? 6 : l == 1 ? 0 : 4));
+        add (new AudioParameterInt (pid (LP::sample), name ("Sample"), 0, lastSample, 0,
+                                    AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+                                    {
+                                        const auto& e = SampleLibrary::get()[v];
+                                        return e.category + " " + e.name;
+                                    })));
+        add (new P (pid (LP::level), name ("Level"), NormalisableRange<float> (0.0f, 1.0f), 0.8f, percent));
+        add (new P (pid (LP::pan), name ("Pan"), NormalisableRange<float> (-1.0f, 1.0f), 0.0f, panAttr));
+        add (new AudioParameterInt (pid (LP::octave), name ("Octave"), -3, 3, l == 2 ? -1 : 0, semis (" oct")));
+        add (new AudioParameterInt (pid (LP::semi), name ("Semitone"), -12, 12, 0, semis (" st")));
+        add (new P (pid (LP::fine), name ("Fine"), NormalisableRange<float> (-100.0f, 100.0f), 0.0f, cents));
+        add (new AudioParameterInt (pid (LP::unison), name ("Unison"), 1, 8, l == 1 ? 7 : 1,
+                                    AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return String (v) + (v == 1 ? " voice" : " voices"); })));
+        add (new P (pid (LP::detune), name ("Detune"), NormalisableRange<float> (0.0f, 100.0f), 20.0f,
+                    Attr().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " ct"; })));
+        add (new P (pid (LP::spread), name ("Spread"), NormalisableRange<float> (0.0f, 1.0f), 0.6f, percent));
+        add (new C (pid (LP::warp), name ("Warp"), Choices::warps, 0));
+        add (new P (pid (LP::speed), name ("Speed"), freqRange (0.25f, 4.0f, 1.0f), 1.0f, speedAttr));
+        add (new C (pid (LP::sync), name ("Sync Length"), Choices::syncLengths, 3));
+        add (new P (pid (LP::grain), name ("Grain"), freqRange (10.0f, 250.0f, 60.0f), 60.0f, ms));
+        add (new P (pid (LP::start), name ("Start"), NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
+        add (new P (pid (LP::end), name ("End"), NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent));
+        add (new B (pid (LP::loop), name ("Loop"), false));
+        add (new B (pid (LP::reverse), name ("Reverse"), false));
+    }
+
+    // Shared voice
+    auto longMs = [&] (float lo, float hi, float centre) { return freqRange (lo, hi, centre); };
+    add (new P ({ ParamIDs::ampAttack, 1 }, "Amp Attack", longMs (0.5f, 5000.0f, 200.0f), 2.0f, ms));
+    add (new P ({ ParamIDs::ampDecay, 1 }, "Amp Decay", longMs (5.0f, 5000.0f, 400.0f), 400.0f, ms));
+    add (new P ({ ParamIDs::ampSustain, 1 }, "Amp Sustain", NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent));
+    add (new P ({ ParamIDs::ampRelease, 1 }, "Amp Release", longMs (5.0f, 8000.0f, 400.0f), 250.0f, ms));
+    add (new C ({ ParamIDs::vFltType, 1 }, "Synth Filter Type", Choices::filterTypes, 0));
+    add (new P ({ ParamIDs::vCutoff, 1 }, "Synth Cutoff", freqRange (20.0f, 20000.0f, 1000.0f), 20000.0f, hz));
+    add (new P ({ ParamIDs::vReso, 1 }, "Synth Resonance", NormalisableRange<float> (0.0f, 1.0f), 0.1f, percent));
+    add (new P ({ ParamIDs::vEnvAmt, 1 }, "Synth Filter Env", NormalisableRange<float> (-1.0f, 1.0f), 0.0f, bipolar));
+    add (new P ({ ParamIDs::vKeyTrack, 1 }, "Synth Key Track", NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
+    add (new P ({ ParamIDs::fltAttack, 1 }, "Filter Attack", longMs (0.5f, 5000.0f, 200.0f), 2.0f, ms));
+    add (new P ({ ParamIDs::fltDecay, 1 }, "Filter Decay", longMs (5.0f, 5000.0f, 400.0f), 400.0f, ms));
+    add (new P ({ ParamIDs::fltSustain, 1 }, "Filter Sustain", NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
+    add (new P ({ ParamIDs::fltRelease, 1 }, "Filter Release", longMs (5.0f, 8000.0f, 400.0f), 300.0f, ms));
+    add (new C ({ ParamIDs::voiceMode, 1 }, "Voice Mode", Choices::voiceModes, 0));
+    add (new P ({ ParamIDs::glide, 1 }, "Glide", longMs (0.0f, 2000.0f, 150.0f), 0.0f, ms));
+    add (new P ({ ParamIDs::velSens, 1 }, "Velocity", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
+    add (new AudioParameterInt ({ ParamIDs::synthTranspose, 1 }, "Transpose", -24, 24, 0, semis (" st")));
+    add (new P ({ ParamIDs::synthLevel, 1 }, "Synth Level", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
+
+    // Sequencer
+    add (new B ({ ParamIDs::randOn, 1 }, "Sequencer On", false));
     add (new C ({ ParamIDs::randRoot, 1 }, "Key", Choices::roots, 0));
     add (new C ({ ParamIDs::randScale, 1 }, "Scale", rf::Scales::names(), 1));
-    add (new C ({ ParamIDs::randRate, 1 }, "Random Rate", Choices::randRates, 3));
-    add (new AudioParameterInt ({ ParamIDs::randOctaves, 1 }, "Random Octaves", 1, 3, 1,
+    add (new C ({ ParamIDs::randRate, 1 }, "Sequencer Rate", Choices::randRates, 3));
+    add (new AudioParameterInt ({ ParamIDs::randOctaves, 1 }, "Sequencer Octaves", 1, 3, 1,
                                 AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return String (v) + " oct"; })));
-    add (new P ({ ParamIDs::randChance, 1 }, "Random Chance", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
-    add (new P ({ ParamIDs::randLength, 1 }, "Random Length", NormalisableRange<float> (0.05f, 1.0f), 0.5f, percent));
-    add (new AudioParameterInt ({ ParamIDs::randSeed, 1 }, "Random Pattern", 1, 9999, 1));
+    add (new P ({ ParamIDs::randChance, 1 }, "Random Density", NormalisableRange<float> (0.0f, 1.0f), 0.7f, percent));
+    add (new P ({ ParamIDs::randLength, 1 }, "Note Length", NormalisableRange<float> (0.05f, 1.0f), 0.5f, percent));
+    add (new AudioParameterInt ({ ParamIDs::seqSteps, 1 }, "Steps", 1, 16, 16));
+    add (new P ({ ParamIDs::seqSwing, 1 }, "Swing", NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
     add (new B ({ ParamIDs::snapKeys, 1 }, "Snap Keys To Scale", false));
+
+    // Arp + chord
+    add (new B ({ ParamIDs::arpOn, 1 }, "Arp On", false));
+    add (new C ({ ParamIDs::arpMode, 1 }, "Arp Mode", rf::Arp::modeNames(), 0));
+    add (new C ({ ParamIDs::arpRate, 1 }, "Arp Rate", Choices::randRates, 3));
+    add (new AudioParameterInt ({ ParamIDs::arpOctaves, 1 }, "Arp Octaves", 1, 4, 1,
+                                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return String (v) + " oct"; })));
+    add (new P ({ ParamIDs::arpGate, 1 }, "Arp Gate", NormalisableRange<float> (0.05f, 1.0f), 0.6f, percent));
+    add (new B ({ ParamIDs::arpLatch, 1 }, "Arp Latch", false));
+    add (new C ({ ParamIDs::chordMode, 1 }, "Chord", rf::NoteMapper::chordNames(), 0));
+
+    // Pump + dynamics
+    add (new B ({ ParamIDs::pumpOn, 1 }, "Pump On", false));
+    add (new C ({ ParamIDs::pumpRate, 1 }, "Pump Rate", Choices::pumpRates, 1));
+    add (new P ({ ParamIDs::pumpDepth, 1 }, "Pump Depth", NormalisableRange<float> (0.0f, 1.0f), 0.6f, percent));
+    add (new P ({ ParamIDs::pumpRelease, 1 }, "Pump Release", NormalisableRange<float> (0.0f, 1.0f), 0.5f, percent));
+    add (new B ({ ParamIDs::compOn, 1 }, "Compressor On", false));
+    add (new P ({ ParamIDs::compThresh, 1 }, "Comp Threshold", NormalisableRange<float> (-48.0f, 0.0f), -12.0f, db));
+    add (new P ({ ParamIDs::compRatio, 1 }, "Comp Ratio", freqRange (1.0f, 20.0f, 4.0f), 4.0f,
+                Attr().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + ":1"; })));
+    add (new P ({ ParamIDs::compAttack, 1 }, "Comp Attack", freqRange (0.1f, 100.0f, 10.0f), 10.0f, ms));
+    add (new P ({ ParamIDs::compRelease, 1 }, "Comp Release", freqRange (10.0f, 1000.0f, 120.0f), 120.0f, ms));
+    add (new P ({ ParamIDs::compMakeup, 1 }, "Comp Makeup", NormalisableRange<float> (0.0f, 24.0f), 0.0f, db));
+    add (new B ({ ParamIDs::limitOn, 1 }, "Limiter On", true));
 
     return { p.begin(), p.end() };
 }
